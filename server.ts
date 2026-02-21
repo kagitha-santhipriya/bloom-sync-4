@@ -38,12 +38,59 @@ async function startServer() {
         ...req.body,
         id: Math.random().toString(36).substr(2, 9),
         timestamp: Date.now(),
+        choice: null, // Track farmer choice: 'A' (Change) or 'B' (Continue)
       };
       data.submissions.push(newSubmission);
       fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
       res.status(201).json(newSubmission);
     } catch (error) {
       res.status(500).json({ error: "Failed to save submission" });
+    }
+  });
+
+  app.patch("/api/submissions/:id/choice", (req, res) => {
+    try {
+      const { id } = req.params;
+      const { choice } = req.body;
+      const data = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
+      const sub = data.submissions.find((s: any) => s.id === id);
+      if (sub) {
+        sub.choice = choice;
+        fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+        res.json(sub);
+      } else {
+        res.status(404).json({ error: "Submission not found" });
+      }
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update choice" });
+    }
+  });
+
+  app.get("/api/admin/stats", (req, res) => {
+    try {
+      const data = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
+      const subs = data.submissions;
+      
+      const stats = {
+        total: subs.length,
+        byRisk: {
+          high: subs.filter((s: any) => s.riskLevel === 'high').length,
+          medium: subs.filter((s: any) => s.riskLevel === 'medium').length,
+          low: subs.filter((s: any) => s.riskLevel === 'low').length,
+        },
+        byChoice: {
+          change: subs.filter((s: any) => s.choice === 'A').length,
+          continue: subs.filter((s: any) => s.choice === 'B').length,
+          none: subs.filter((s: any) => !s.choice).length,
+        },
+        byCrop: subs.reduce((acc: any, s: any) => {
+          acc[s.crop] = (acc[s.crop] || 0) + 1;
+          return acc;
+        }, {}),
+      };
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get stats" });
     }
   });
 

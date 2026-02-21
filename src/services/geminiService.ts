@@ -9,32 +9,29 @@ function getAI() {
   return aiInstance;
 }
 
-export interface ClimateIntelligence {
-  temperatureAnomaly: number;
-  ndviTrend: string;
-  rainfallAnomaly: number;
-  globalClimateSignal: string;
-}
-
 export interface FarmerAdvisory {
-  riskScore: number;
-  yieldImpactPercentage: number;
-  stageRecommendations: string;
-  actionableSteps: string[];
+  whatMayHappen: string;
+  expectedYieldChange: string;
+  optionA: {
+    suggestion: string;
+    crops: string[];
+  };
+  optionB: {
+    precautionSteps: string[];
+  };
 }
 
 export interface AnalysisResult {
   bloomingData: { date: string; activity: number }[];
   pollinationData: { date: string; activity: number }[];
   riskLevel: 'low' | 'medium' | 'high';
+  riskScore: number;
   mismatchDays: number;
-  suggestions: string;
-  climaticConditions: string;
   yieldRiskPercentage: number;
   lat: number;
   lng: number;
-  climateIntelligence: ClimateIntelligence;
-  farmerAdvisory: FarmerAdvisory;
+  advisory: FarmerAdvisory;
+  climaticConditions: string;
 }
 
 export async function analyzeCropMismatch(
@@ -48,46 +45,49 @@ export async function analyzeCropMismatch(
   
   const prompt = `
     Act as a NASA agricultural scientist and climate expert. 
-    Analyze the blooming and pollination mismatch for the following:
+    Analyze the blooming and pollination mismatch for:
     Crop: ${crop}
     Location: ${location}
     Target Date: ${date}
     Response Language: ${language}
 
-    Architecture Requirements:
-    1. Global Climate Intelligence Layer: Extract satellite-derived temperature anomalies, NDVI trends, and rainfall data for this specific location.
-    2. Local Farmer Advisory Layer: Convert these climate signals into crop-specific risk scoring, yield impact percentage, and stage-based actionable recommendations.
+    SYSTEM STRUCTURE:
+    Layer 1 – Global Climate Intelligence Engine (Internal Processing)
+    - Process temperature/rainfall forecasts, seasonal anomalies, vegetation trends, and pollinator activity.
+    - Calculate Risk Score (0-10) and Yield Impact.
 
-    Analysis Tasks:
-    1. Generate a 12-month series of blooming activity (0-100) and pollination activity (0-100) centered around the target date.
-    2. Calculate the mismatch in days between peak blooming and peak pollination.
-    3. Assess the risk level (low, medium, high) and yield risk percentage.
-    4. Provide detailed suggestions and solutions in ${language}.
-    5. Describe the climatic conditions at that location in ${language}.
-    6. Provide the exact latitude and longitude for the location: "${location}".
+    Layer 2 – Farmer Advisory Layer (Output)
+    - CONVERT technical output into simple farmer-understandable language.
+    - DO NOT use scientific jargon like NDVI, Anomaly, Correlation, Thermal deviation, or Pollination deficit.
+    - Use simple phrases: "Too hot this season", "Too much rain during flowering", "Less insects seen", "Flowers may fall", "Fruit count may reduce".
+
+    ADVISORY FORMAT:
+    1. What may happen: Simple explanation of the climate impact on the crop.
+    2. Expected Yield: Percentage change (e.g., "10-15% lower than normal").
+    3. Option A (Change Crop): Suggest 2-3 safer alternative crops for that season.
+    4. Option B (Continue Same Crop): Provide 4-5 practical precaution steps in simple language.
 
     Return the data in the following JSON format:
     {
       "bloomingData": [{"date": "Jan", "activity": 20}, ...],
       "pollinationData": [{"date": "Jan", "activity": 15}, ...],
       "riskLevel": "high",
+      "riskScore": 8.5,
       "mismatchDays": 12,
-      "suggestions": "Detailed suggestions in ${language}...",
-      "climaticConditions": "Description of weather/climate in ${language}...",
       "yieldRiskPercentage": 45,
       "lat": 17.3850,
       "lng": 78.4867,
-      "climateIntelligence": {
-        "temperatureAnomaly": 1.5,
-        "ndviTrend": "Decreasing due to heat stress",
-        "rainfallAnomaly": -20,
-        "globalClimateSignal": "El Niño influence detected"
-      },
-      "farmerAdvisory": {
-        "riskScore": 85,
-        "yieldImpactPercentage": 30,
-        "stageRecommendations": "Specific advice for current crop stage in ${language}",
-        "actionableSteps": ["Step 1 in ${language}", "Step 2 in ${language}"]
+      "climaticConditions": "Simple weather description in ${language}",
+      "advisory": {
+        "whatMayHappen": "Simple explanation in ${language}",
+        "expectedYieldChange": "e.g., 10-15% lower than normal in ${language}",
+        "optionA": {
+          "suggestion": "Why these crops are better in ${language}",
+          "crops": ["Crop 1", "Crop 2"]
+        },
+        "optionB": {
+          "precautionSteps": ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5"]
+        }
       }
     }
   `;
@@ -123,37 +123,37 @@ export async function analyzeCropMismatch(
             }
           },
           riskLevel: { type: Type.STRING },
+          riskScore: { type: Type.NUMBER },
           mismatchDays: { type: Type.NUMBER },
-          suggestions: { type: Type.STRING },
-          climaticConditions: { type: Type.STRING },
           yieldRiskPercentage: { type: Type.NUMBER },
           lat: { type: Type.NUMBER },
           lng: { type: Type.NUMBER },
-          climateIntelligence: {
+          climaticConditions: { type: Type.STRING },
+          advisory: {
             type: Type.OBJECT,
             properties: {
-              temperatureAnomaly: { type: Type.NUMBER },
-              ndviTrend: { type: Type.STRING },
-              rainfallAnomaly: { type: Type.NUMBER },
-              globalClimateSignal: { type: Type.STRING }
-            },
-            required: ["temperatureAnomaly", "ndviTrend", "rainfallAnomaly", "globalClimateSignal"]
-          },
-          farmerAdvisory: {
-            type: Type.OBJECT,
-            properties: {
-              riskScore: { type: Type.NUMBER },
-              yieldImpactPercentage: { type: Type.NUMBER },
-              stageRecommendations: { type: Type.STRING },
-              actionableSteps: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
+              whatMayHappen: { type: Type.STRING },
+              expectedYieldChange: { type: Type.STRING },
+              optionA: {
+                type: Type.OBJECT,
+                properties: {
+                  suggestion: { type: Type.STRING },
+                  crops: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["suggestion", "crops"]
+              },
+              optionB: {
+                type: Type.OBJECT,
+                properties: {
+                  precautionSteps: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["precautionSteps"]
               }
             },
-            required: ["riskScore", "yieldImpactPercentage", "stageRecommendations", "actionableSteps"]
+            required: ["whatMayHappen", "expectedYieldChange", "optionA", "optionB"]
           }
         },
-        required: ["bloomingData", "pollinationData", "riskLevel", "mismatchDays", "suggestions", "climaticConditions", "yieldRiskPercentage", "lat", "lng", "climateIntelligence", "farmerAdvisory"]
+        required: ["bloomingData", "pollinationData", "riskLevel", "riskScore", "mismatchDays", "yieldRiskPercentage", "lat", "lng", "climaticConditions", "advisory"]
       }
     }
   });

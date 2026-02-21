@@ -23,7 +23,11 @@ import {
   Mic,
   MicOff,
   Volume2,
-  VolumeX
+  VolumeX,
+  RefreshCw,
+  Download,
+  Activity,
+  Filter
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -35,7 +39,12 @@ import {
   ResponsiveContainer, 
   Legend,
   AreaChart,
-  Area
+  Area,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
@@ -72,13 +81,20 @@ if (typeof window !== 'undefined' && L.Icon.Default) {
 
 export default function App() {
   const [lang, setLang] = useState<Language>('en');
-  const [activeTab, setActiveTab] = useState<'farmer' | 'map' | 'scientist' | 'history'>('farmer');
+  const [activeTab, setActiveTab] = useState<'farmer' | 'map' | 'scientist' | 'history' | 'admin'>('farmer');
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
   const [analysis, setAnalysis] = useState<any | null>(null);
   const [submissions, setSubmissions] = useState<any[]>([]);
+  const [adminStats, setAdminStats] = useState<any>(null);
   const [mapCenter, setMapCenter] = useState<[number, number]>([17.3850, 78.4867]);
+  const [currentSubmissionId, setCurrentSubmissionId] = useState<string | null>(null);
+  const [userChoice, setUserChoice] = useState<'A' | 'B' | null>(null);
+
+  // Filters
+  const [filterRisk, setFilterRisk] = useState<string>('all');
+  const [filterCrop, setFilterCrop] = useState<string>('all');
   
   const t = TRANSLATIONS[lang];
 
@@ -90,7 +106,20 @@ export default function App() {
   // Fetch submissions on mount
   useEffect(() => {
     fetchSubmissions();
-  }, []);
+    if (activeTab === 'admin') {
+      fetchAdminStats();
+    }
+  }, [activeTab]);
+
+  const fetchAdminStats = async () => {
+    try {
+      const response = await fetch('/api/admin/stats');
+      const data = await response.json();
+      setAdminStats(data);
+    } catch (error) {
+      console.error("Failed to fetch admin stats", error);
+    }
+  };
 
   const fetchSubmissions = async () => {
     try {
@@ -139,8 +168,38 @@ export default function App() {
     recognition.start();
   };
 
-  const handleSpeak = async (text?: string) => {
-    const textToSpeak = text || analysis?.suggestions;
+  const handleChoice = async (choice: 'A' | 'B') => {
+    if (!currentSubmissionId) return;
+    try {
+      await fetch(`/api/submissions/${currentSubmissionId}/choice`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ choice }),
+      });
+      setUserChoice(choice);
+      fetchSubmissions();
+    } catch (error) {
+      console.error("Failed to save choice", error);
+    }
+  };
+
+  const handleSpeak = async (customText?: string) => {
+    if (!analysis && !customText) return;
+    
+    let textToSpeak = "";
+    if (customText) {
+      textToSpeak = customText;
+    } else if (analysis) {
+      textToSpeak = `
+        ${t.cropType}: ${crop}.
+        ${t.riskLevel}: ${t[analysis.riskLevel]}.
+        ${t.whatMayHappen}: ${analysis.advisory.whatMayHappen}.
+        ${t.expectedYield}: ${analysis.advisory.expectedYieldChange}.
+        ${t.optionA}: ${analysis.advisory.optionA.suggestion}.
+        ${t.optionB}: ${analysis.advisory.optionB.precautionSteps.join(". ")}.
+      `;
+    }
+
     if (!textToSpeak || speaking) return;
     
     setSpeaking(true);
@@ -201,12 +260,20 @@ export default function App() {
       });
 
       if (response.ok) {
+        const savedSub = await response.json();
+        setCurrentSubmissionId(savedSub.id);
+        setUserChoice(null);
         fetchSubmissions();
       }
 
       // Auto-trigger voice assistant for high risk
       if (result.riskLevel === 'high') {
-        handleSpeak(`${t.autoVoiceAlert} ${result.suggestions}`);
+        const voiceText = `
+          ${t.autoVoiceAlert}.
+          ${t.riskLevel}: ${t[result.riskLevel]}.
+          ${t.whatMayHappen}: ${result.advisory.whatMayHappen}.
+        `;
+        handleSpeak(voiceText);
       }
     } catch (error) {
       console.error("Analysis failed", error);
@@ -268,6 +335,18 @@ export default function App() {
               <div className="flex items-center gap-1.5">
                 <Calendar size={14} />
                 {t.historyPortal}
+              </div>
+            </button>
+            <button 
+              onClick={() => setActiveTab('admin')}
+              className={cn(
+                "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
+                activeTab === 'admin' ? "bg-emerald-600 text-white shadow-sm" : "text-stone-400 hover:text-stone-100"
+              )}
+            >
+              <div className="flex items-center gap-1.5">
+                <BarChart3 size={14} />
+                {t.adminPortal}
               </div>
             </button>
           </nav>
@@ -411,50 +490,117 @@ export default function App() {
                     animate={{ opacity: 1, scale: 1 }}
                     className="space-y-6"
                   >
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-stone-900/40 backdrop-blur-md p-4 rounded-2xl border border-stone-800 shadow-xl">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">{t.riskLevel}</p>
-                        <div className="flex items-center gap-2">
+                    {/* Farmer Advisory Layer - Simplified */}
+                    <div className="bg-emerald-900/40 backdrop-blur-md p-6 rounded-2xl border border-emerald-800/30 shadow-xl">
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
                           <div className={cn(
-                            "w-3 h-3 rounded-full",
+                            "w-4 h-4 rounded-full animate-pulse",
                             analysis.riskLevel === 'high' ? "bg-red-500" : analysis.riskLevel === 'medium' ? "bg-yellow-500" : "bg-emerald-500"
                           )} />
-                          <span className="text-lg font-bold text-stone-100">{t[analysis.riskLevel]}</span>
+                          <h2 className="text-xl font-bold text-stone-100">
+                            {t.riskLevel}: <span className={cn(
+                              analysis.riskLevel === 'high' ? "text-red-400" : analysis.riskLevel === 'medium' ? "text-yellow-400" : "text-emerald-400"
+                            )}>{t[analysis.riskLevel]}</span>
+                          </h2>
+                        </div>
+                        <button 
+                          onClick={() => handleSpeak()}
+                          disabled={speaking}
+                          className={cn(
+                            "p-3 rounded-full transition-all",
+                            speaking ? "bg-emerald-500/20 text-emerald-400 animate-pulse" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
+                          )}
+                        >
+                          {speaking ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <div className="bg-stone-950/40 p-4 rounded-xl border border-stone-800">
+                            <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">{t.whatMayHappen}</h3>
+                            <p className="text-stone-200 leading-relaxed">{analysis.advisory.whatMayHappen}</p>
+                          </div>
+                          <div className="bg-stone-950/40 p-4 rounded-xl border border-stone-800">
+                            <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">{t.expectedYield}</h3>
+                            <p className="text-2xl font-bold text-stone-100">{analysis.advisory.expectedYieldChange}</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="bg-stone-950/40 p-4 rounded-xl border border-stone-800">
+                            <h3 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">{t.climaticConditions}</h3>
+                            <p className="text-stone-300 text-sm italic">"{analysis.climaticConditions}"</p>
+                          </div>
                         </div>
                       </div>
-                      <div className="bg-stone-900/40 backdrop-blur-md p-4 rounded-2xl border border-stone-800 shadow-xl">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">{t.mismatch}</p>
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle size={18} className="text-amber-500" />
-                          <span className="text-lg font-bold text-stone-100">{analysis.mismatchDays} {t.days}</span>
+
+                      {/* Decision Options */}
+                      <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Option A */}
+                        <div className={cn(
+                          "p-6 rounded-2xl border transition-all cursor-pointer group",
+                          userChoice === 'A' ? "bg-blue-900/40 border-blue-500 shadow-lg shadow-blue-900/20" : "bg-stone-950/40 border-stone-800 hover:border-blue-500/50"
+                        )} onClick={() => handleChoice('A')}>
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-bold text-blue-400 flex items-center gap-2">
+                              <RefreshCw size={18} />
+                              {t.optionA}
+                            </h3>
+                            {userChoice === 'A' && <CheckCircle2 size={20} className="text-blue-400" />}
+                          </div>
+                          <p className="text-sm text-stone-300 mb-4">{analysis.advisory.optionA.suggestion}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {analysis.advisory.optionA.crops.map((c: string, i: number) => (
+                              <span key={i} className="px-2 py-1 bg-blue-900/20 text-blue-300 rounded-md text-[10px] font-bold border border-blue-800/30">
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Option B */}
+                        <div className={cn(
+                          "p-6 rounded-2xl border transition-all cursor-pointer group",
+                          userChoice === 'B' ? "bg-emerald-900/40 border-emerald-500 shadow-lg shadow-emerald-900/20" : "bg-stone-950/40 border-stone-800 hover:border-emerald-500/50"
+                        )} onClick={() => handleChoice('B')}>
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-bold text-emerald-400 flex items-center gap-2">
+                              <CheckCircle2 size={18} />
+                              {t.optionB}
+                            </h3>
+                            {userChoice === 'B' && <CheckCircle2 size={20} className="text-emerald-400" />}
+                          </div>
+                          <ul className="space-y-2">
+                            {analysis.advisory.optionB.precautionSteps.map((step: string, i: number) => (
+                              <li key={i} className="text-xs text-stone-300 flex items-start gap-2">
+                                <div className="w-1 h-1 bg-emerald-500 rounded-full mt-1.5 shrink-0" />
+                                {step}
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       </div>
-                      <div className="bg-stone-900/40 backdrop-blur-md p-4 rounded-2xl border border-stone-800 shadow-xl">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">{t.yieldRisk}</p>
-                        <div className="flex items-center gap-2">
-                          <BarChart3 size={18} className="text-emerald-500" />
-                          <span className="text-lg font-bold text-stone-100">{analysis.yieldRiskPercentage}%</span>
-                        </div>
-                      </div>
+                      
+                      {userChoice && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-6 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center text-emerald-400 text-sm font-medium"
+                        >
+                          {t.choiceSelected}
+                        </motion.div>
+                      )}
                     </div>
 
-                    {/* Chart */}
+                    {/* Technical Layer - Internal Engine Visualization */}
                     <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
-                      <h3 className="text-sm font-bold mb-6 flex items-center justify-between text-stone-100">
-                        <span>{t.mismatch} Analysis (12 Months)</span>
-                        <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-3 h-0.5 bg-emerald-500" />
-                            <span>Blooming</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-3 h-0.5 bg-amber-500" />
-                            <span>Pollination</span>
-                          </div>
-                        </div>
+                      <h3 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-6 flex items-center gap-2">
+                        <Activity size={16} />
+                        Climate Intelligence Engine Output
                       </h3>
-                      <div className="h-[300px] w-full">
+                      <div className="h-[250px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={analysis.bloomingData}>
                             <defs>
@@ -471,141 +617,12 @@ export default function App() {
                             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#78716c' }} />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#78716c' }} />
                             <Tooltip 
-                              contentStyle={{ backgroundColor: '#1c1917', borderRadius: '12px', border: '1px solid #44403c', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
-                              itemStyle={{ color: '#e7e5e4' }}
+                              contentStyle={{ backgroundColor: '#1c1917', borderRadius: '12px', border: '1px solid #44403c', color: '#e7e5e4' }}
                             />
-                            <Area 
-                              type="monotone" 
-                              dataKey="activity" 
-                              stroke="#10b981" 
-                              strokeWidth={3}
-                              fillOpacity={1} 
-                              fill="url(#colorBloom)" 
-                              name="Blooming"
-                            />
-                            <Area 
-                              data={analysis.pollinationData}
-                              type="monotone" 
-                              dataKey="activity" 
-                              stroke="#f59e0b" 
-                              strokeWidth={3}
-                              fillOpacity={1} 
-                              fill="url(#colorPollin)" 
-                              name="Pollination"
-                            />
+                            <Area type="monotone" dataKey="activity" stroke="#10b981" strokeWidth={2} fill="url(#colorBloom)" name="Bloom Window" />
+                            <Area data={analysis.pollinationData} type="monotone" dataKey="activity" stroke="#f59e0b" strokeWidth={2} fill="url(#colorPollin)" name="Pollinator Activity" />
                           </AreaChart>
                         </ResponsiveContainer>
-                      </div>
-                    </div>
-
-                    {/* Layered Advisory & Climate Intelligence */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Global Climate Intelligence Layer */}
-                      <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
-                        <h3 className="font-bold mb-4 flex items-center gap-2 text-blue-400">
-                          <Globe size={20} />
-                          {t.climateIntelligence}
-                        </h3>
-                        <div className="space-y-4">
-                          <div className="flex justify-between items-center p-3 bg-blue-900/20 rounded-xl border border-blue-800/30">
-                            <span className="text-xs font-semibold text-blue-300">{t.tempAnomaly}</span>
-                            <span className="font-bold text-blue-100">+{analysis.climateIntelligence.temperatureAnomaly}°C</span>
-                          </div>
-                          <div className="flex justify-between items-center p-3 bg-cyan-900/20 rounded-xl border border-cyan-800/30">
-                            <span className="text-xs font-semibold text-cyan-300">{t.rainfallAnomaly}</span>
-                            <span className="font-bold text-cyan-100">{analysis.climateIntelligence.rainfallAnomaly}%</span>
-                          </div>
-                          <div className="p-3 bg-stone-950/40 rounded-xl border border-stone-800/50">
-                            <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.ndviTrend}</p>
-                            <p className="text-sm font-medium text-stone-200">{analysis.climateIntelligence.ndviTrend}</p>
-                          </div>
-                          <div className="p-3 bg-stone-950/40 rounded-xl border border-stone-800/50">
-                            <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.climateSignal}</p>
-                            <p className="text-sm font-medium text-stone-200">{analysis.climateIntelligence.globalClimateSignal}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Local Farmer Advisory Layer */}
-                      <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
-                        <h3 className="font-bold mb-4 flex items-center gap-2 text-emerald-400">
-                          <Sprout size={20} />
-                          {t.farmerAdvisory}
-                        </h3>
-                        <div className="space-y-4">
-                          <div className="flex justify-between items-center p-3 bg-emerald-900/20 rounded-xl border border-emerald-800/30">
-                            <span className="text-xs font-semibold text-emerald-300">{t.riskScore}</span>
-                            <span className="font-bold text-emerald-100">{analysis.farmerAdvisory.riskScore}/100</span>
-                          </div>
-                          <div className="flex justify-between items-center p-3 bg-amber-900/20 rounded-xl border border-amber-800/30">
-                            <span className="text-xs font-semibold text-amber-300">{t.yieldImpact}</span>
-                            <span className="font-bold text-amber-100">-{analysis.farmerAdvisory.yieldImpactPercentage}%</span>
-                          </div>
-                          <div className="p-3 bg-stone-950/40 rounded-xl border border-stone-800/50">
-                            <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.stageRecommendations}</p>
-                            <p className="text-sm font-medium text-stone-200">{analysis.farmerAdvisory.stageRecommendations}</p>
-                          </div>
-                          <div className="p-3 bg-stone-950/40 rounded-xl border border-stone-800/50">
-                            <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.actionableSteps}</p>
-                            <ul className="list-disc list-inside text-sm space-y-1 mt-1 text-stone-300">
-                              {analysis.farmerAdvisory.actionableSteps.map((step, i) => (
-                                <li key={i}>{step}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Suggestions & Climate */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="font-bold flex items-center gap-2 text-emerald-400">
-                            <CheckCircle2 size={20} />
-                            {t.suggestions}
-                          </h3>
-                          <button 
-                            onClick={() => handleSpeak()}
-                            disabled={speaking}
-                            className={cn(
-                              "p-2 rounded-full transition-all",
-                              speaking ? "bg-emerald-500/20 text-emerald-400 animate-pulse" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
-                            )}
-                            title="Listen to suggestions"
-                          >
-                            {speaking ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                          </button>
-                        </div>
-                        <div className="text-sm text-stone-300 leading-relaxed whitespace-pre-line">
-                          {analysis.suggestions}
-                        </div>
-                      </div>
-                      <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
-                        <h3 className="font-bold mb-4 flex items-center gap-2 text-blue-400">
-                          <Wind size={20} />
-                          {t.climaticConditions}
-                        </h3>
-                        <div className="text-sm text-stone-300 leading-relaxed">
-                          {analysis.climaticConditions}
-                        </div>
-                        <div className="mt-6 grid grid-cols-3 gap-2">
-                          <div className="p-3 bg-blue-900/20 rounded-xl text-center border border-blue-800/30">
-                            <ThermometerSun size={16} className="mx-auto mb-1 text-blue-400" />
-                            <p className="text-[10px] font-bold text-blue-300">TEMP</p>
-                            <p className="text-xs font-bold text-stone-100">28°C</p>
-                          </div>
-                          <div className="p-3 bg-cyan-900/20 rounded-xl text-center border border-cyan-800/30">
-                            <Droplets size={16} className="mx-auto mb-1 text-cyan-400" />
-                            <p className="text-[10px] font-bold text-cyan-300">HUMID</p>
-                            <p className="text-xs font-bold text-stone-100">65%</p>
-                          </div>
-                          <div className="p-3 bg-stone-950/40 rounded-xl text-center border border-stone-800/50">
-                            <Wind size={16} className="mx-auto mb-1 text-stone-400" />
-                            <p className="text-[10px] font-bold text-stone-500">WIND</p>
-                            <p className="text-xs font-bold text-stone-100">12km/h</p>
-                          </div>
-                        </div>
                       </div>
                     </div>
                   </motion.div>
@@ -614,6 +631,99 @@ export default function App() {
             </motion.div>
           )}
 
+          {activeTab === 'admin' && (
+            <motion.div 
+              key="admin"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-6"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-stone-100">{t.adminPortal}</h2>
+                  <p className="text-stone-400 text-sm">{t.adminStats}</p>
+                </div>
+                <button className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-all flex items-center gap-2">
+                  <Download size={16} />
+                  {t.exportData}
+                </button>
+              </div>
+
+              {adminStats ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                    <p className="text-xs font-bold text-stone-500 uppercase mb-2">{t.totalSubmissions}</p>
+                    <p className="text-4xl font-bold text-emerald-400">{adminStats.total}</p>
+                  </div>
+                  <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                    <p className="text-xs font-bold text-stone-500 uppercase mb-2">High Risk Areas</p>
+                    <p className="text-4xl font-bold text-red-400">{adminStats.byRisk.high}</p>
+                  </div>
+                  <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                    <p className="text-xs font-bold text-stone-500 uppercase mb-2">Decided to Change</p>
+                    <p className="text-4xl font-bold text-blue-400">{adminStats.byChoice.change}</p>
+                  </div>
+                  <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                    <p className="text-xs font-bold text-stone-500 uppercase mb-2">Decided to Continue</p>
+                    <p className="text-4xl font-bold text-emerald-400">{adminStats.byChoice.continue}</p>
+                  </div>
+
+                  <div className="lg:col-span-2 bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                    <h3 className="font-bold mb-6 text-stone-100">{t.riskDistribution}</h3>
+                    <div className="h-[250px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={[
+                          { name: 'High', value: adminStats.byRisk.high, color: '#ef4444' },
+                          { name: 'Medium', value: adminStats.byRisk.medium, color: '#f59e0b' },
+                          { name: 'Low', value: adminStats.byRisk.low, color: '#10b981' },
+                        ]}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#292524" />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#78716c' }} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fill: '#78716c' }} />
+                          <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c' }} />
+                          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                            { [0,1,2].map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={index === 0 ? '#ef4444' : index === 1 ? '#f59e0b' : '#10b981'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-2 bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                    <h3 className="font-bold mb-6 text-stone-100">{t.cropPopularity}</h3>
+                    <div className="h-[250px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={Object.entries(adminStats.byCrop).map(([name, value]) => ({ name, value }))}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={80}
+                            paddingAngle={5}
+                            dataKey="value"
+                          >
+                            {Object.entries(adminStats.byCrop).map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'][index % 5]} />
+                            ))}
+                          </Pie>
+                          <Tooltip contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c' }} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 size={32} className="animate-spin text-emerald-500" />
+                </div>
+              )}
+            </motion.div>
+          )}
           {activeTab === 'history' && (
             <motion.div 
               key="history"
@@ -683,18 +793,49 @@ export default function App() {
                   <h2 className="text-2xl font-bold text-stone-100">{t.mapPortal}</h2>
                   <p className="text-stone-400 text-sm">Real-time global monitoring of pollination risk zones.</p>
                 </div>
-                <div className="flex items-center gap-4 bg-stone-900/40 backdrop-blur-md p-2 rounded-xl border border-stone-800 shadow-xl">
-                  <div className="flex items-center gap-2 px-3 py-1">
-                    <div className="w-3 h-3 rounded-full bg-red-500" />
-                    <span className="text-xs font-medium text-stone-300">{t.redZone}</span>
+                
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2 bg-stone-900/40 backdrop-blur-md p-1.5 rounded-xl border border-stone-800">
+                    <Filter size={14} className="text-stone-500 ml-2" />
+                    <select 
+                      value={filterRisk}
+                      onChange={(e) => setFilterRisk(e.target.value)}
+                      className="bg-transparent text-xs text-stone-300 outline-none border-none cursor-pointer"
+                    >
+                      <option value="all" className="bg-stone-900">All Risks</option>
+                      <option value="high" className="bg-stone-900">High Risk</option>
+                      <option value="medium" className="bg-stone-900">Medium Risk</option>
+                      <option value="low" className="bg-stone-900">Low Risk</option>
+                    </select>
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-1">
-                    <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                    <span className="text-xs font-medium text-stone-300">{t.yellowZone}</span>
+                  
+                  <div className="flex items-center gap-2 bg-stone-900/40 backdrop-blur-md p-1.5 rounded-xl border border-stone-800">
+                    <Sprout size={14} className="text-stone-500 ml-2" />
+                    <select 
+                      value={filterCrop}
+                      onChange={(e) => setFilterCrop(e.target.value)}
+                      className="bg-transparent text-xs text-stone-300 outline-none border-none cursor-pointer"
+                    >
+                      <option value="all" className="bg-stone-900">All Crops</option>
+                      {Array.from(new Set(submissions.map(s => s.crop))).map(crop => (
+                        <option key={crop} value={crop} className="bg-stone-900">{crop}</option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-1">
-                    <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                    <span className="text-xs font-medium text-stone-300">{t.greenZone}</span>
+
+                  <div className="flex items-center gap-4 bg-stone-900/40 backdrop-blur-md p-2 rounded-xl border border-stone-800 shadow-xl">
+                    <div className="flex items-center gap-2 px-3 py-1">
+                      <div className="w-3 h-3 rounded-full bg-red-500" />
+                      <span className="text-xs font-medium text-stone-300">{t.redZone}</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1">
+                      <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                      <span className="text-xs font-medium text-stone-300">{t.yellowZone}</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1">
+                      <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                      <span className="text-xs font-medium text-stone-300">{t.greenZone}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -710,7 +851,10 @@ export default function App() {
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   />
-                  {submissions.map((sub) => (
+                  {submissions
+                    .filter(s => filterRisk === 'all' || s.riskLevel === filterRisk)
+                    .filter(s => filterCrop === 'all' || s.crop === filterCrop)
+                    .map((sub) => (
                     <React.Fragment key={sub.id}>
                       <Marker position={[sub.lat, sub.lng]}>
                         <Popup>
