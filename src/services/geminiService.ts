@@ -9,6 +9,20 @@ function getAI() {
   return aiInstance;
 }
 
+export interface ClimateIntelligence {
+  temperatureAnomaly: number;
+  ndviTrend: string;
+  rainfallAnomaly: number;
+  globalClimateSignal: string;
+}
+
+export interface FarmerAdvisory {
+  riskScore: number;
+  yieldImpactPercentage: number;
+  stageRecommendations: string;
+  actionableSteps: string[];
+}
+
 export interface AnalysisResult {
   bloomingData: { date: string; activity: number }[];
   pollinationData: { date: string; activity: number }[];
@@ -19,6 +33,8 @@ export interface AnalysisResult {
   yieldRiskPercentage: number;
   lat: number;
   lng: number;
+  climateIntelligence: ClimateIntelligence;
+  farmerAdvisory: FarmerAdvisory;
 }
 
 export async function analyzeCropMismatch(
@@ -38,11 +54,15 @@ export async function analyzeCropMismatch(
     Target Date: ${date}
     Response Language: ${language}
 
-    Based on satellite data trends (NASA MODIS/VIIRS) and climate change models:
+    Architecture Requirements:
+    1. Global Climate Intelligence Layer: Extract satellite-derived temperature anomalies, NDVI trends, and rainfall data for this specific location.
+    2. Local Farmer Advisory Layer: Convert these climate signals into crop-specific risk scoring, yield impact percentage, and stage-based actionable recommendations.
+
+    Analysis Tasks:
     1. Generate a 12-month series of blooming activity (0-100) and pollination activity (0-100) centered around the target date.
     2. Calculate the mismatch in days between peak blooming and peak pollination.
     3. Assess the risk level (low, medium, high) and yield risk percentage.
-    4. Provide detailed suggestions and solutions (alternative crops, auto-pollination, etc.) in ${language}.
+    4. Provide detailed suggestions and solutions in ${language}.
     5. Describe the climatic conditions at that location in ${language}.
     6. Provide the exact latitude and longitude for the location: "${location}".
 
@@ -56,7 +76,19 @@ export async function analyzeCropMismatch(
       "climaticConditions": "Description of weather/climate in ${language}...",
       "yieldRiskPercentage": 45,
       "lat": 17.3850,
-      "lng": 78.4867
+      "lng": 78.4867,
+      "climateIntelligence": {
+        "temperatureAnomaly": 1.5,
+        "ndviTrend": "Decreasing due to heat stress",
+        "rainfallAnomaly": -20,
+        "globalClimateSignal": "El Niño influence detected"
+      },
+      "farmerAdvisory": {
+        "riskScore": 85,
+        "yieldImpactPercentage": 30,
+        "stageRecommendations": "Specific advice for current crop stage in ${language}",
+        "actionableSteps": ["Step 1 in ${language}", "Step 2 in ${language}"]
+      }
     }
   `;
 
@@ -96,9 +128,32 @@ export async function analyzeCropMismatch(
           climaticConditions: { type: Type.STRING },
           yieldRiskPercentage: { type: Type.NUMBER },
           lat: { type: Type.NUMBER },
-          lng: { type: Type.NUMBER }
+          lng: { type: Type.NUMBER },
+          climateIntelligence: {
+            type: Type.OBJECT,
+            properties: {
+              temperatureAnomaly: { type: Type.NUMBER },
+              ndviTrend: { type: Type.STRING },
+              rainfallAnomaly: { type: Type.NUMBER },
+              globalClimateSignal: { type: Type.STRING }
+            },
+            required: ["temperatureAnomaly", "ndviTrend", "rainfallAnomaly", "globalClimateSignal"]
+          },
+          farmerAdvisory: {
+            type: Type.OBJECT,
+            properties: {
+              riskScore: { type: Type.NUMBER },
+              yieldImpactPercentage: { type: Type.NUMBER },
+              stageRecommendations: { type: Type.STRING },
+              actionableSteps: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              }
+            },
+            required: ["riskScore", "yieldImpactPercentage", "stageRecommendations", "actionableSteps"]
+          }
         },
-        required: ["bloomingData", "pollinationData", "riskLevel", "mismatchDays", "suggestions", "climaticConditions", "yieldRiskPercentage", "lat", "lng"]
+        required: ["bloomingData", "pollinationData", "riskLevel", "mismatchDays", "suggestions", "climaticConditions", "yieldRiskPercentage", "lat", "lng", "climateIntelligence", "farmerAdvisory"]
       }
     }
   });

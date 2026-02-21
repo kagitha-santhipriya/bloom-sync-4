@@ -53,7 +53,18 @@ export const TRANSLATIONS: Record<Language, any> = {
     voiceInput: "Voice Input",
     listening: "Listening...",
     stopListening: "Stop",
-    voiceAssistant: "Voice Assistant"
+    voiceAssistant: "Voice Assistant",
+    climateIntelligence: "Global Climate Intelligence",
+    farmerAdvisory: "Local Farmer Advisory",
+    riskScore: "Risk Score",
+    yieldImpact: "Yield Impact",
+    stageRecommendations: "Stage Recommendations",
+    actionableSteps: "Actionable Steps",
+    tempAnomaly: "Temp Anomaly",
+    ndviTrend: "NDVI Trend",
+    rainfallAnomaly: "Rainfall Anomaly",
+    climateSignal: "Climate Signal",
+    autoVoiceAlert: "High Risk Detected! Playing Advisory..."
   },
   te: {
     title: "బ్లూమ్ సింక్ (Bloom Sync)",

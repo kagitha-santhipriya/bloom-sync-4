@@ -87,6 +87,23 @@ export default function App() {
   const [location, setLocation] = useState('');
   const [date, setDate] = useState('');
 
+  // Fetch submissions on mount
+  useEffect(() => {
+    fetchSubmissions();
+  }, []);
+
+  const fetchSubmissions = async () => {
+    try {
+      const response = await fetch('/api/submissions');
+      if (response.ok) {
+        const data = await response.json();
+        setSubmissions(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch submissions", error);
+    }
+  };
+
   // Voice Recognition
   const startListening = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -122,12 +139,11 @@ export default function App() {
     recognition.start();
   };
 
-  const handleSpeak = async () => {
-    if (!analysis || speaking) return;
+  const handleSpeak = async (text?: string) => {
+    const textToSpeak = text || analysis?.suggestions;
+    if (!textToSpeak || speaking) return;
     
-    const textToSpeak = analysis.suggestions;
     setSpeaking(true);
-    
     try {
       const base64Audio = await generateSpeech(textToSpeak);
       if (base64Audio) {
@@ -153,9 +169,7 @@ export default function App() {
       setAnalysis(result);
       setMapCenter([result.lat, result.lng]);
       
-      // Add to submissions for the map
-      const newSubmission: Submission = {
-        id: Math.random().toString(36).substr(2, 9),
+      const newSubmission = {
         crop,
         location,
         lat: result.lat,
@@ -163,9 +177,23 @@ export default function App() {
         date,
         riskLevel: result.riskLevel,
         climaticConditions: result.climaticConditions,
-        timestamp: Date.now()
       };
-      setSubmissions(prev => [newSubmission, ...prev]);
+
+      // Save to backend
+      const response = await fetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSubmission),
+      });
+
+      if (response.ok) {
+        fetchSubmissions();
+      }
+
+      // Auto-trigger voice assistant for high risk
+      if (result.riskLevel === 'high') {
+        handleSpeak(`${t.autoVoiceAlert} ${result.suggestions}`);
+      }
     } catch (error) {
       console.error("Analysis failed", error);
     } finally {
@@ -443,6 +471,65 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* Layered Advisory & Climate Intelligence */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Global Climate Intelligence Layer */}
+                      <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                        <h3 className="font-bold mb-4 flex items-center gap-2 text-blue-700">
+                          <Globe size={20} />
+                          {t.climateIntelligence}
+                        </h3>
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center p-3 bg-blue-50 rounded-xl">
+                            <span className="text-xs font-semibold text-blue-800">{t.tempAnomaly}</span>
+                            <span className="font-bold text-blue-900">+{analysis.climateIntelligence.temperatureAnomaly}°C</span>
+                          </div>
+                          <div className="flex justify-between items-center p-3 bg-cyan-50 rounded-xl">
+                            <span className="text-xs font-semibold text-cyan-800">{t.rainfallAnomaly}</span>
+                            <span className="font-bold text-cyan-900">{analysis.climateIntelligence.rainfallAnomaly}%</span>
+                          </div>
+                          <div className="p-3 bg-stone-50 rounded-xl">
+                            <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.ndviTrend}</p>
+                            <p className="text-sm font-medium">{analysis.climateIntelligence.ndviTrend}</p>
+                          </div>
+                          <div className="p-3 bg-stone-50 rounded-xl">
+                            <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.climateSignal}</p>
+                            <p className="text-sm font-medium">{analysis.climateIntelligence.globalClimateSignal}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Local Farmer Advisory Layer */}
+                      <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                        <h3 className="font-bold mb-4 flex items-center gap-2 text-emerald-700">
+                          <Sprout size={20} />
+                          {t.farmerAdvisory}
+                        </h3>
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-center p-3 bg-emerald-50 rounded-xl">
+                            <span className="text-xs font-semibold text-emerald-800">{t.riskScore}</span>
+                            <span className="font-bold text-emerald-900">{analysis.farmerAdvisory.riskScore}/100</span>
+                          </div>
+                          <div className="flex justify-between items-center p-3 bg-amber-50 rounded-xl">
+                            <span className="text-xs font-semibold text-amber-800">{t.yieldImpact}</span>
+                            <span className="font-bold text-amber-900">-{analysis.farmerAdvisory.yieldImpactPercentage}%</span>
+                          </div>
+                          <div className="p-3 bg-stone-50 rounded-xl">
+                            <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.stageRecommendations}</p>
+                            <p className="text-sm font-medium">{analysis.farmerAdvisory.stageRecommendations}</p>
+                          </div>
+                          <div className="p-3 bg-stone-50 rounded-xl">
+                            <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.actionableSteps}</p>
+                            <ul className="list-disc list-inside text-sm space-y-1 mt-1">
+                              {analysis.farmerAdvisory.actionableSteps.map((step, i) => (
+                                <li key={i}>{step}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Suggestions & Climate */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
@@ -544,28 +631,36 @@ export default function App() {
                     <React.Fragment key={sub.id}>
                       <Marker position={[sub.lat, sub.lng]}>
                         <Popup>
-                          <div className="p-1">
-                            <h4 className="font-bold text-emerald-700">{sub.crop}</h4>
-                            <p className="text-xs text-stone-500">{sub.location}</p>
-                            <div className="mt-2 pt-2 border-t border-stone-100 flex items-center justify-between gap-4">
-                              <span className={cn(
-                                "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
-                                sub.riskLevel === 'high' ? "bg-red-100 text-red-700" : sub.riskLevel === 'medium' ? "bg-yellow-100 text-yellow-700" : "bg-emerald-100 text-emerald-700"
-                              )}>
-                                {t[sub.riskLevel]} Risk
-                              </span>
-                              <span className="text-[10px] text-stone-400">{new Date(sub.timestamp).toLocaleDateString()}</span>
+                          <div className="p-1 min-w-[150px]">
+                            <h4 className="font-bold text-emerald-700 text-sm">{sub.crop}</h4>
+                            <p className="text-[10px] text-stone-500 mb-2">{sub.location}</p>
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-[10px]">
+                                <span className="text-stone-400">Risk:</span>
+                                <span className={cn(
+                                  "font-bold",
+                                  sub.riskLevel === 'high' ? "text-red-600" : sub.riskLevel === 'medium' ? "text-amber-600" : "text-emerald-600"
+                                )}>{t[sub.riskLevel]}</span>
+                              </div>
+                              <div className="flex justify-between text-[10px]">
+                                <span className="text-stone-400">Date:</span>
+                                <span className="font-medium">{sub.date}</span>
+                              </div>
+                            </div>
+                            <div className="mt-2 pt-2 border-t border-stone-100">
+                              <span className="text-[9px] text-stone-300">{new Date(sub.timestamp).toLocaleString()}</span>
                             </div>
                           </div>
                         </Popup>
                       </Marker>
                       <Circle 
                         center={[sub.lat, sub.lng]}
-                        radius={50000}
+                        radius={20000}
                         pathOptions={{
                           fillColor: sub.riskLevel === 'high' ? '#ef4444' : sub.riskLevel === 'medium' ? '#f59e0b' : '#10b981',
-                          color: 'transparent',
-                          fillOpacity: 0.2
+                          color: sub.riskLevel === 'high' ? '#ef4444' : sub.riskLevel === 'medium' ? '#f59e0b' : '#10b981',
+                          weight: 1,
+                          fillOpacity: 0.3
                         }}
                       />
                     </React.Fragment>
