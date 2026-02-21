@@ -72,12 +72,12 @@ if (typeof window !== 'undefined' && L.Icon.Default) {
 
 export default function App() {
   const [lang, setLang] = useState<Language>('en');
-  const [activeTab, setActiveTab] = useState<'farmer' | 'map' | 'scientist'>('farmer');
+  const [activeTab, setActiveTab] = useState<'farmer' | 'map' | 'scientist' | 'history'>('farmer');
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [analysis, setAnalysis] = useState<any | null>(null);
+  const [submissions, setSubmissions] = useState<any[]>([]);
   const [mapCenter, setMapCenter] = useState<[number, number]>([17.3850, 78.4867]);
   
   const t = TRANSLATIONS[lang];
@@ -159,6 +159,19 @@ export default function App() {
     }
   };
 
+  const loadSubmission = (sub: any) => {
+    setCrop(sub.crop);
+    setLocation(sub.location);
+    setDate(sub.date);
+    setAnalysis(sub.fullAnalysis || null);
+    setMapCenter([sub.lat, sub.lng]);
+    setActiveTab('farmer');
+    
+    if (sub.riskLevel === 'high' && sub.fullAnalysis) {
+      handleSpeak(`${t.autoVoiceAlert} ${sub.fullAnalysis.suggestions}`);
+    }
+  };
+
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!crop || !location || !date) return;
@@ -177,6 +190,7 @@ export default function App() {
         date,
         riskLevel: result.riskLevel,
         climaticConditions: result.climaticConditions,
+        fullAnalysis: result // Store full analysis for re-checking
       };
 
       // Save to backend
@@ -204,24 +218,24 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-stone-200 sticky top-0 z-50">
+      <header className="bg-stone-900/40 backdrop-blur-md border-b border-stone-800 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+            <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-900/20">
               <Sprout size={24} />
             </div>
             <div>
-              <h1 className="font-bold text-xl tracking-tight text-stone-900">{t.title}</h1>
-              <p className="text-[10px] uppercase tracking-widest font-semibold text-emerald-600 leading-none">{t.subtitle}</p>
+              <h1 className="font-bold text-xl tracking-tight text-stone-100">{t.title}</h1>
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-emerald-400 leading-none">{t.subtitle}</p>
             </div>
           </div>
 
-          <nav className="hidden md:flex items-center gap-1 bg-stone-100 p-1 rounded-lg">
+          <nav className="hidden md:flex items-center gap-1 bg-stone-950/40 p-1 rounded-lg border border-stone-800">
             <button 
               onClick={() => setActiveTab('farmer')}
               className={cn(
                 "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
-                activeTab === 'farmer' ? "bg-white text-emerald-700 shadow-sm" : "text-stone-500 hover:text-stone-900"
+                activeTab === 'farmer' ? "bg-emerald-600 text-white shadow-sm" : "text-stone-400 hover:text-stone-100"
               )}
             >
               {t.farmerPortal}
@@ -230,7 +244,7 @@ export default function App() {
               onClick={() => setActiveTab('map')}
               className={cn(
                 "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
-                activeTab === 'map' ? "bg-white text-emerald-700 shadow-sm" : "text-stone-500 hover:text-stone-900"
+                activeTab === 'map' ? "bg-emerald-600 text-white shadow-sm" : "text-stone-400 hover:text-stone-100"
               )}
             >
               {t.mapPortal}
@@ -239,10 +253,22 @@ export default function App() {
               onClick={() => setActiveTab('scientist')}
               className={cn(
                 "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
-                activeTab === 'scientist' ? "bg-white text-emerald-700 shadow-sm" : "text-stone-500 hover:text-stone-900"
+                activeTab === 'scientist' ? "bg-emerald-600 text-white shadow-sm" : "text-stone-400 hover:text-stone-100"
               )}
             >
               {t.nasaScientistView}
+            </button>
+            <button 
+              onClick={() => setActiveTab('history')}
+              className={cn(
+                "px-4 py-1.5 rounded-md text-sm font-medium transition-all",
+                activeTab === 'history' ? "bg-emerald-600 text-white shadow-sm" : "text-stone-400 hover:text-stone-100"
+              )}
+            >
+              <div className="flex items-center gap-1.5">
+                <Calendar size={14} />
+                {t.historyPortal}
+              </div>
             </button>
           </nav>
 
@@ -250,10 +276,10 @@ export default function App() {
             <select 
               value={lang}
               onChange={(e) => setLang(e.target.value as Language)}
-              className="bg-stone-50 border border-stone-200 rounded-full px-3 py-1.5 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+              className="bg-stone-900/60 border border-stone-700 text-stone-200 rounded-full px-3 py-1.5 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
             >
               {LANGUAGES.map(l => (
-                <option key={l.code} value={l.code}>{l.name}</option>
+                <option key={l.code} value={l.code} className="bg-stone-900">{l.name}</option>
               ))}
             </select>
           </div>
@@ -273,10 +299,10 @@ export default function App() {
             >
               {/* Input Form */}
               <div className="lg:col-span-4 space-y-6">
-                <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold flex items-center gap-2">
-                      <Search size={20} className="text-emerald-600" />
+                    <h2 className="text-lg font-semibold flex items-center gap-2 text-stone-100">
+                      <Search size={20} className="text-emerald-400" />
                       {t.farmerPortal}
                     </h2>
                     <button
@@ -284,7 +310,7 @@ export default function App() {
                       disabled={listening || loading}
                       className={cn(
                         "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
-                        listening ? "bg-red-100 text-red-600 animate-pulse" : "bg-stone-100 text-stone-600 hover:bg-emerald-100 hover:text-emerald-600"
+                        listening ? "bg-red-500/20 text-red-400 animate-pulse" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
                       )}
                     >
                       {listening ? <MicOff size={14} /> : <Mic size={14} />}
@@ -299,20 +325,20 @@ export default function App() {
                         value={crop}
                         onChange={(e) => setCrop(e.target.value)}
                         placeholder="e.g. Mango, Cotton, Rice"
-                        className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+                        className="w-full px-4 py-2.5 rounded-xl bg-stone-950/40 border border-stone-800 text-stone-100 placeholder:text-stone-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
                         required
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">{t.location}</label>
                       <div className="relative">
-                        <MapPin size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                        <MapPin size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
                         <input 
                           type="text" 
                           value={location}
                           onChange={(e) => setLocation(e.target.value)}
                           placeholder="e.g. Hyderabad, Telangana"
-                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-stone-950/40 border border-stone-800 text-stone-100 placeholder:text-stone-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
                           required
                         />
                       </div>
@@ -320,12 +346,12 @@ export default function App() {
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">{t.date}</label>
                       <div className="relative">
-                        <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                        <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
                         <input 
                           type="date" 
                           value={date}
                           onChange={(e) => setDate(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-stone-950/40 border border-stone-800 text-stone-100 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
                           required
                         />
                       </div>
@@ -333,7 +359,7 @@ export default function App() {
                     <button 
                       type="submit"
                       disabled={loading}
-                      className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {loading ? (
                         <>
@@ -348,8 +374,8 @@ export default function App() {
                 </div>
 
                 {/* Quick Info */}
-                <div className="bg-emerald-900 text-emerald-50 p-6 rounded-2xl shadow-xl">
-                  <h3 className="font-bold mb-2 flex items-center gap-2">
+                <div className="bg-emerald-900/40 backdrop-blur-md text-emerald-50 p-6 rounded-2xl border border-emerald-800/30 shadow-xl">
+                  <h3 className="font-bold mb-2 flex items-center gap-2 text-emerald-300">
                     <Info size={18} />
                     NASA Satellite Insights
                   </h3>
@@ -362,19 +388,19 @@ export default function App() {
               {/* Analysis Results */}
               <div className="lg:col-span-8 space-y-6">
                 {!analysis && !loading && (
-                  <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-12 bg-white rounded-2xl border-2 border-dashed border-stone-200">
-                    <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mb-4">
-                      <Globe size={40} className="text-stone-300" />
+                  <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-12 bg-stone-900/40 backdrop-blur-md rounded-2xl border-2 border-dashed border-stone-800">
+                    <div className="w-20 h-20 bg-stone-950/40 rounded-full flex items-center justify-center mb-4">
+                      <Globe size={40} className="text-stone-700" />
                     </div>
-                    <h3 className="text-xl font-bold text-stone-400">Ready for Analysis</h3>
-                    <p className="text-stone-400 max-w-xs mt-2">Enter your crop and location details to see the pollination mismatch analysis.</p>
+                    <h3 className="text-xl font-bold text-stone-500">Ready for Analysis</h3>
+                    <p className="text-stone-600 max-w-xs mt-2">Enter your crop and location details to see the pollination mismatch analysis.</p>
                   </div>
                 )}
 
                 {loading && (
-                  <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-12 bg-white rounded-2xl border border-stone-200">
-                    <Loader2 size={48} className="text-emerald-600 animate-spin mb-4" />
-                    <h3 className="text-xl font-bold text-stone-900">{t.analyzing}</h3>
+                  <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-12 bg-stone-900/40 backdrop-blur-md rounded-2xl border border-stone-800">
+                    <Loader2 size={48} className="text-emerald-500 animate-spin mb-4" />
+                    <h3 className="text-xl font-bold text-stone-100">{t.analyzing}</h3>
                     <p className="text-stone-500 mt-2">Connecting to NASA Earth Data nodes...</p>
                   </div>
                 )}
@@ -387,35 +413,35 @@ export default function App() {
                   >
                     {/* Stats Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1">{t.riskLevel}</p>
+                      <div className="bg-stone-900/40 backdrop-blur-md p-4 rounded-2xl border border-stone-800 shadow-xl">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">{t.riskLevel}</p>
                         <div className="flex items-center gap-2">
                           <div className={cn(
                             "w-3 h-3 rounded-full",
                             analysis.riskLevel === 'high' ? "bg-red-500" : analysis.riskLevel === 'medium' ? "bg-yellow-500" : "bg-emerald-500"
                           )} />
-                          <span className="text-lg font-bold">{t[analysis.riskLevel]}</span>
+                          <span className="text-lg font-bold text-stone-100">{t[analysis.riskLevel]}</span>
                         </div>
                       </div>
-                      <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1">{t.mismatch}</p>
+                      <div className="bg-stone-900/40 backdrop-blur-md p-4 rounded-2xl border border-stone-800 shadow-xl">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">{t.mismatch}</p>
                         <div className="flex items-center gap-2">
                           <AlertTriangle size={18} className="text-amber-500" />
-                          <span className="text-lg font-bold">{analysis.mismatchDays} {t.days}</span>
+                          <span className="text-lg font-bold text-stone-100">{analysis.mismatchDays} {t.days}</span>
                         </div>
                       </div>
-                      <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400 mb-1">{t.yieldRisk}</p>
+                      <div className="bg-stone-900/40 backdrop-blur-md p-4 rounded-2xl border border-stone-800 shadow-xl">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 mb-1">{t.yieldRisk}</p>
                         <div className="flex items-center gap-2">
-                          <BarChart3 size={18} className="text-emerald-600" />
-                          <span className="text-lg font-bold">{analysis.yieldRiskPercentage}%</span>
+                          <BarChart3 size={18} className="text-emerald-500" />
+                          <span className="text-lg font-bold text-stone-100">{analysis.yieldRiskPercentage}%</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Chart */}
-                    <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
-                      <h3 className="text-sm font-bold mb-6 flex items-center justify-between">
+                    <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                      <h3 className="text-sm font-bold mb-6 flex items-center justify-between text-stone-100">
                         <span>{t.mismatch} Analysis (12 Months)</span>
                         <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest">
                           <div className="flex items-center gap-1.5">
@@ -433,19 +459,20 @@ export default function App() {
                           <AreaChart data={analysis.bloomingData}>
                             <defs>
                               <linearGradient id="colorBloom" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
                                 <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                               </linearGradient>
                               <linearGradient id="colorPollin" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2}/>
                                 <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
                               </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f1" />
-                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#a8a29e' }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#a8a29e' }} />
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#292524" />
+                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#78716c' }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#78716c' }} />
                             <Tooltip 
-                              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                              contentStyle={{ backgroundColor: '#1c1917', borderRadius: '12px', border: '1px solid #44403c', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)' }}
+                              itemStyle={{ color: '#e7e5e4' }}
                             />
                             <Area 
                               type="monotone" 
@@ -474,53 +501,53 @@ export default function App() {
                     {/* Layered Advisory & Climate Intelligence */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Global Climate Intelligence Layer */}
-                      <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
-                        <h3 className="font-bold mb-4 flex items-center gap-2 text-blue-700">
+                      <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                        <h3 className="font-bold mb-4 flex items-center gap-2 text-blue-400">
                           <Globe size={20} />
                           {t.climateIntelligence}
                         </h3>
                         <div className="space-y-4">
-                          <div className="flex justify-between items-center p-3 bg-blue-50 rounded-xl">
-                            <span className="text-xs font-semibold text-blue-800">{t.tempAnomaly}</span>
-                            <span className="font-bold text-blue-900">+{analysis.climateIntelligence.temperatureAnomaly}°C</span>
+                          <div className="flex justify-between items-center p-3 bg-blue-900/20 rounded-xl border border-blue-800/30">
+                            <span className="text-xs font-semibold text-blue-300">{t.tempAnomaly}</span>
+                            <span className="font-bold text-blue-100">+{analysis.climateIntelligence.temperatureAnomaly}°C</span>
                           </div>
-                          <div className="flex justify-between items-center p-3 bg-cyan-50 rounded-xl">
-                            <span className="text-xs font-semibold text-cyan-800">{t.rainfallAnomaly}</span>
-                            <span className="font-bold text-cyan-900">{analysis.climateIntelligence.rainfallAnomaly}%</span>
+                          <div className="flex justify-between items-center p-3 bg-cyan-900/20 rounded-xl border border-cyan-800/30">
+                            <span className="text-xs font-semibold text-cyan-300">{t.rainfallAnomaly}</span>
+                            <span className="font-bold text-cyan-100">{analysis.climateIntelligence.rainfallAnomaly}%</span>
                           </div>
-                          <div className="p-3 bg-stone-50 rounded-xl">
+                          <div className="p-3 bg-stone-950/40 rounded-xl border border-stone-800/50">
                             <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.ndviTrend}</p>
-                            <p className="text-sm font-medium">{analysis.climateIntelligence.ndviTrend}</p>
+                            <p className="text-sm font-medium text-stone-200">{analysis.climateIntelligence.ndviTrend}</p>
                           </div>
-                          <div className="p-3 bg-stone-50 rounded-xl">
+                          <div className="p-3 bg-stone-950/40 rounded-xl border border-stone-800/50">
                             <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.climateSignal}</p>
-                            <p className="text-sm font-medium">{analysis.climateIntelligence.globalClimateSignal}</p>
+                            <p className="text-sm font-medium text-stone-200">{analysis.climateIntelligence.globalClimateSignal}</p>
                           </div>
                         </div>
                       </div>
 
                       {/* Local Farmer Advisory Layer */}
-                      <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
-                        <h3 className="font-bold mb-4 flex items-center gap-2 text-emerald-700">
+                      <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                        <h3 className="font-bold mb-4 flex items-center gap-2 text-emerald-400">
                           <Sprout size={20} />
                           {t.farmerAdvisory}
                         </h3>
                         <div className="space-y-4">
-                          <div className="flex justify-between items-center p-3 bg-emerald-50 rounded-xl">
-                            <span className="text-xs font-semibold text-emerald-800">{t.riskScore}</span>
-                            <span className="font-bold text-emerald-900">{analysis.farmerAdvisory.riskScore}/100</span>
+                          <div className="flex justify-between items-center p-3 bg-emerald-900/20 rounded-xl border border-emerald-800/30">
+                            <span className="text-xs font-semibold text-emerald-300">{t.riskScore}</span>
+                            <span className="font-bold text-emerald-100">{analysis.farmerAdvisory.riskScore}/100</span>
                           </div>
-                          <div className="flex justify-between items-center p-3 bg-amber-50 rounded-xl">
-                            <span className="text-xs font-semibold text-amber-800">{t.yieldImpact}</span>
-                            <span className="font-bold text-amber-900">-{analysis.farmerAdvisory.yieldImpactPercentage}%</span>
+                          <div className="flex justify-between items-center p-3 bg-amber-900/20 rounded-xl border border-amber-800/30">
+                            <span className="text-xs font-semibold text-amber-300">{t.yieldImpact}</span>
+                            <span className="font-bold text-amber-100">-{analysis.farmerAdvisory.yieldImpactPercentage}%</span>
                           </div>
-                          <div className="p-3 bg-stone-50 rounded-xl">
+                          <div className="p-3 bg-stone-950/40 rounded-xl border border-stone-800/50">
                             <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.stageRecommendations}</p>
-                            <p className="text-sm font-medium">{analysis.farmerAdvisory.stageRecommendations}</p>
+                            <p className="text-sm font-medium text-stone-200">{analysis.farmerAdvisory.stageRecommendations}</p>
                           </div>
-                          <div className="p-3 bg-stone-50 rounded-xl">
+                          <div className="p-3 bg-stone-950/40 rounded-xl border border-stone-800/50">
                             <p className="text-[10px] font-bold text-stone-500 uppercase mb-1">{t.actionableSteps}</p>
-                            <ul className="list-disc list-inside text-sm space-y-1 mt-1">
+                            <ul className="list-disc list-inside text-sm space-y-1 mt-1 text-stone-300">
                               {analysis.farmerAdvisory.actionableSteps.map((step, i) => (
                                 <li key={i}>{step}</li>
                               ))}
@@ -532,51 +559,51 @@ export default function App() {
 
                     {/* Suggestions & Climate */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+                      <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
                         <div className="flex items-center justify-between mb-4">
-                          <h3 className="font-bold flex items-center gap-2 text-emerald-700">
+                          <h3 className="font-bold flex items-center gap-2 text-emerald-400">
                             <CheckCircle2 size={20} />
                             {t.suggestions}
                           </h3>
                           <button 
-                            onClick={handleSpeak}
+                            onClick={() => handleSpeak()}
                             disabled={speaking}
                             className={cn(
                               "p-2 rounded-full transition-all",
-                              speaking ? "bg-emerald-100 text-emerald-600 animate-pulse" : "bg-stone-100 text-stone-600 hover:bg-emerald-100 hover:text-emerald-600"
+                              speaking ? "bg-emerald-500/20 text-emerald-400 animate-pulse" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
                             )}
                             title="Listen to suggestions"
                           >
                             {speaking ? <VolumeX size={18} /> : <Volume2 size={18} />}
                           </button>
                         </div>
-                        <div className="text-sm text-stone-600 leading-relaxed whitespace-pre-line">
+                        <div className="text-sm text-stone-300 leading-relaxed whitespace-pre-line">
                           {analysis.suggestions}
                         </div>
                       </div>
-                      <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
-                        <h3 className="font-bold mb-4 flex items-center gap-2 text-blue-700">
+                      <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                        <h3 className="font-bold mb-4 flex items-center gap-2 text-blue-400">
                           <Wind size={20} />
                           {t.climaticConditions}
                         </h3>
-                        <div className="text-sm text-stone-600 leading-relaxed">
+                        <div className="text-sm text-stone-300 leading-relaxed">
                           {analysis.climaticConditions}
                         </div>
                         <div className="mt-6 grid grid-cols-3 gap-2">
-                          <div className="p-3 bg-blue-50 rounded-xl text-center">
-                            <ThermometerSun size={16} className="mx-auto mb-1 text-blue-600" />
-                            <p className="text-[10px] font-bold text-blue-800">TEMP</p>
-                            <p className="text-xs font-bold">28°C</p>
+                          <div className="p-3 bg-blue-900/20 rounded-xl text-center border border-blue-800/30">
+                            <ThermometerSun size={16} className="mx-auto mb-1 text-blue-400" />
+                            <p className="text-[10px] font-bold text-blue-300">TEMP</p>
+                            <p className="text-xs font-bold text-stone-100">28°C</p>
                           </div>
-                          <div className="p-3 bg-cyan-50 rounded-xl text-center">
-                            <Droplets size={16} className="mx-auto mb-1 text-cyan-600" />
-                            <p className="text-[10px] font-bold text-cyan-800">HUMID</p>
-                            <p className="text-xs font-bold">65%</p>
+                          <div className="p-3 bg-cyan-900/20 rounded-xl text-center border border-cyan-800/30">
+                            <Droplets size={16} className="mx-auto mb-1 text-cyan-400" />
+                            <p className="text-[10px] font-bold text-cyan-300">HUMID</p>
+                            <p className="text-xs font-bold text-stone-100">65%</p>
                           </div>
-                          <div className="p-3 bg-stone-50 rounded-xl text-center">
-                            <Wind size={16} className="mx-auto mb-1 text-stone-600" />
-                            <p className="text-[10px] font-bold text-stone-800">WIND</p>
-                            <p className="text-xs font-bold">12km/h</p>
+                          <div className="p-3 bg-stone-950/40 rounded-xl text-center border border-stone-800/50">
+                            <Wind size={16} className="mx-auto mb-1 text-stone-400" />
+                            <p className="text-[10px] font-bold text-stone-500">WIND</p>
+                            <p className="text-xs font-bold text-stone-100">12km/h</p>
                           </div>
                         </div>
                       </div>
@@ -584,6 +611,62 @@ export default function App() {
                   </motion.div>
                 )}
               </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'history' && (
+            <motion.div 
+              key="history"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-6"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-stone-100">{t.historyPortal}</h2>
+                  <p className="text-stone-400 text-sm">Access and re-examine all your previous agricultural assessments.</p>
+                </div>
+              </div>
+
+              {submissions.length === 0 ? (
+                <div className="bg-stone-900/40 backdrop-blur-md p-12 rounded-2xl border border-stone-800 text-center">
+                  <Calendar size={48} className="mx-auto text-stone-700 mb-4" />
+                  <p className="text-stone-500">{t.noRecords}</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {submissions.map((sub) => (
+                    <div key={sub.id} className="bg-stone-900/40 backdrop-blur-md p-5 rounded-2xl border border-stone-800 shadow-xl hover:bg-stone-800/40 transition-all group">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-bold text-stone-100 group-hover:text-emerald-400 transition-colors">{sub.crop}</h3>
+                          <p className="text-xs text-stone-500 flex items-center gap-1">
+                            <MapPin size={12} />
+                            {sub.location}
+                          </p>
+                        </div>
+                        <span className={cn(
+                          "px-2 py-1 rounded-lg text-[10px] font-bold uppercase",
+                          sub.riskLevel === 'high' ? "bg-red-900/40 text-red-400 border border-red-800/30" : sub.riskLevel === 'medium' ? "bg-amber-900/40 text-amber-400 border border-amber-800/30" : "bg-emerald-900/40 text-emerald-400 border border-emerald-800/30"
+                        )}>
+                          {t[sub.riskLevel]}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-stone-500 mb-4">
+                        {new Date(sub.timestamp).toLocaleString()}
+                      </div>
+                      <button 
+                        onClick={() => loadSubmission(sub)}
+                        className="w-full py-2 bg-stone-950/40 hover:bg-emerald-600 text-stone-400 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border border-stone-800"
+                      >
+                        <Search size={14} />
+                        {t.viewAnalysis}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -597,26 +680,26 @@ export default function App() {
             >
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-stone-900">{t.mapPortal}</h2>
-                  <p className="text-stone-500 text-sm">Real-time global monitoring of pollination risk zones.</p>
+                  <h2 className="text-2xl font-bold text-stone-100">{t.mapPortal}</h2>
+                  <p className="text-stone-400 text-sm">Real-time global monitoring of pollination risk zones.</p>
                 </div>
-                <div className="flex items-center gap-4 bg-white p-2 rounded-xl border border-stone-200 shadow-sm">
+                <div className="flex items-center gap-4 bg-stone-900/40 backdrop-blur-md p-2 rounded-xl border border-stone-800 shadow-xl">
                   <div className="flex items-center gap-2 px-3 py-1">
                     <div className="w-3 h-3 rounded-full bg-red-500" />
-                    <span className="text-xs font-medium">{t.redZone}</span>
+                    <span className="text-xs font-medium text-stone-300">{t.redZone}</span>
                   </div>
                   <div className="flex items-center gap-2 px-3 py-1">
                     <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                    <span className="text-xs font-medium">{t.yellowZone}</span>
+                    <span className="text-xs font-medium text-stone-300">{t.yellowZone}</span>
                   </div>
                   <div className="flex items-center gap-2 px-3 py-1">
                     <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                    <span className="text-xs font-medium">{t.greenZone}</span>
+                    <span className="text-xs font-medium text-stone-300">{t.greenZone}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex-1 bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden relative">
+              <div className="flex-1 bg-stone-900/40 backdrop-blur-md rounded-2xl border border-stone-800 shadow-xl overflow-hidden relative">
                 <MapContainer 
                   center={mapCenter} 
                   zoom={6} 
@@ -680,11 +763,11 @@ export default function App() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold text-stone-900">{t.nasaScientistView}</h2>
-                  <p className="text-stone-500 text-sm">Advanced satellite data correlation and global trend analysis.</p>
+                  <h2 className="text-2xl font-bold text-stone-100">{t.nasaScientistView}</h2>
+                  <p className="text-stone-400 text-sm">Advanced satellite data correlation and global trend analysis.</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold">
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-900/40 text-emerald-400 border border-emerald-800/30 rounded-lg text-xs font-bold">
                     <Globe size={14} />
                     LIVE SATELLITE FEED
                   </span>
@@ -692,9 +775,9 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-2 bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
-                  <h3 className="font-bold mb-6 flex items-center gap-2">
-                    <BarChart3 size={20} className="text-emerald-600" />
+                <div className="md:col-span-2 bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                  <h3 className="font-bold mb-6 flex items-center gap-2 text-stone-100">
+                    <BarChart3 size={20} className="text-emerald-400" />
                     Global Mismatch Trends (2020-2026)
                   </h3>
                   <div className="h-[350px]">
@@ -708,10 +791,12 @@ export default function App() {
                         { year: '2025', mismatch: 13.5, temp: 1.8 },
                         { year: '2026', mismatch: 15.8, temp: 2.0 },
                       ]}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f1" />
-                        <XAxis dataKey="year" axisLine={false} tickLine={false} />
-                        <YAxis axisLine={false} tickLine={false} />
-                        <Tooltip />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#292524" />
+                        <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fill: '#78716c' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#78716c' }} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', color: '#e7e5e4' }}
+                        />
                         <Legend />
                         <Line type="monotone" dataKey="mismatch" stroke="#10b981" strokeWidth={3} name="Avg Mismatch (Days)" />
                         <Line type="monotone" dataKey="temp" stroke="#ef4444" strokeWidth={3} name="Global Temp Anomaly (°C)" />
@@ -721,8 +806,8 @@ export default function App() {
                 </div>
 
                 <div className="space-y-6">
-                  <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
-                    <h3 className="font-bold mb-4 text-sm uppercase tracking-wider text-stone-400">Critical Regions</h3>
+                  <div className="bg-stone-900/40 backdrop-blur-md p-6 rounded-2xl border border-stone-800 shadow-xl">
+                    <h3 className="font-bold mb-4 text-sm uppercase tracking-wider text-stone-500">Critical Regions</h3>
                     <div className="space-y-4">
                       {[
                         { region: 'South Asia', risk: 'High', trend: 'Increasing' },
@@ -730,14 +815,14 @@ export default function App() {
                         { region: 'Mediterranean', risk: 'Medium', trend: 'Increasing' },
                         { region: 'Central America', risk: 'High', trend: 'Increasing' },
                       ].map((item, i) => (
-                        <div key={i} className="flex items-center justify-between p-3 bg-stone-50 rounded-xl">
+                        <div key={i} className="flex items-center justify-between p-3 bg-stone-950/40 rounded-xl border border-stone-800/50">
                           <div>
-                            <p className="font-bold text-sm">{item.region}</p>
+                            <p className="font-bold text-sm text-stone-200">{item.region}</p>
                             <p className="text-[10px] text-stone-500 uppercase tracking-tighter">{item.trend}</p>
                           </div>
                           <span className={cn(
                             "px-2 py-1 rounded-md text-[10px] font-bold",
-                            item.risk === 'High' ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
+                            item.risk === 'High' ? "bg-red-900/40 text-red-400 border border-red-800/30" : "bg-yellow-900/40 text-yellow-400 border border-yellow-800/30"
                           )}>
                             {item.risk}
                           </span>
@@ -746,9 +831,9 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="bg-emerald-900 text-white p-6 rounded-2xl shadow-xl relative overflow-hidden">
+                  <div className="bg-emerald-900/40 backdrop-blur-md text-white p-6 rounded-2xl border border-emerald-800/30 shadow-xl relative overflow-hidden">
                     <div className="relative z-10">
-                      <h3 className="font-bold mb-2">Satellite Status</h3>
+                      <h3 className="font-bold mb-2 text-emerald-300">Satellite Status</h3>
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
                         <span className="text-xs font-medium opacity-80">Terra & Aqua (MODIS) Online</span>
@@ -767,16 +852,16 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-stone-200 py-8">
+      <footer className="bg-stone-900/40 backdrop-blur-md border-t border-stone-800 py-8">
         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 opacity-50">
-            <Sprout size={20} />
-            <span className="font-bold text-sm">Bloom Sync &copy; 2026</span>
+            <Sprout size={20} className="text-emerald-400" />
+            <span className="font-bold text-sm text-stone-300">Bloom Sync &copy; 2026</span>
           </div>
-          <div className="flex items-center gap-6 text-xs font-bold uppercase tracking-widest text-stone-400">
-            <a href="#" className="hover:text-emerald-600 transition-colors">NASA EarthData</a>
-            <a href="#" className="hover:text-emerald-600 transition-colors">FAO Statistics</a>
-            <a href="#" className="hover:text-emerald-600 transition-colors">Climate Watch</a>
+          <div className="flex items-center gap-6 text-xs font-bold uppercase tracking-widest text-stone-500">
+            <a href="#" className="hover:text-emerald-400 transition-colors">NASA EarthData</a>
+            <a href="#" className="hover:text-emerald-400 transition-colors">FAO Statistics</a>
+            <a href="#" className="hover:text-emerald-400 transition-colors">Climate Watch</a>
           </div>
         </div>
       </footer>

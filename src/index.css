@@ -6,11 +6,16 @@
 }
 
 body {
-  @apply bg-stone-50 text-stone-900 font-sans;
+  @apply bg-stone-950 text-stone-100 font-sans min-h-screen relative;
+  background-image: linear-gradient(to bottom, rgba(12, 10, 9, 0.9), rgba(12, 10, 9, 0.95)), url('https://picsum.photos/seed/agriculture-bees/1920/1080?blur=3');
+  background-attachment: fixed;
+  background-size: cover;
+  background-position: center;
 }
 
 .leaflet-container {
   width: 100%;
   height: 100%;
   border-radius: 1rem;
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
 }
