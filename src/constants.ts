@@ -88,7 +88,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     ndviTrend: "NDVI Trend",
     rainfallAnomaly: "Rainfall Anomaly",
     climateSignal: "Climate Signal",
-    autoVoiceAlert: "High Risk Detected! Playing Advisory..."
+    autoVoiceAlert: "High Risk Detected! Playing Advisory...",
+    gotIt: "Got it."
   },
   te: {
     title: "బ్లూమ్ సింక్ (Bloom Sync)",
@@ -145,7 +146,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     dateRange: "తేదీ పరిధి",
     listening: "వింటున్నాను...",
     stopListening: "ఆపు",
-    voiceAssistant: "వాయిస్ అసిస్టెంట్"
+    voiceAssistant: "వాయిస్ అసిస్టెంట్",
+    gotIt: "అర్థమైంది."
   },
   hi: {
     title: "ब्लूम सिंक (Bloom Sync)",
@@ -213,7 +215,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     ndviTrend: "NDVI रुझान",
     rainfallAnomaly: "वर्षा विसंगति",
     climateSignal: "जलवायु संकेत",
-    autoVoiceAlert: "उच्च जोखिम का पता चला! सलाहकार बजा रहा है..."
+    autoVoiceAlert: "उच्च जोखिम का पता चला! सलाहकार बजा रहा है...",
+    gotIt: "समझ गया।"
   },
   ta: {
     title: "ப்ளூம் சிங்க் (Bloom Sync)",
@@ -281,7 +284,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     ndviTrend: "NDVI போக்கு",
     rainfallAnomaly: "மழைப்பொழிவு ஒழுங்கின்மை",
     climateSignal: "காலநிலை சமிக்ஞை",
-    autoVoiceAlert: "அதிக ஆபத்து கண்டறியப்பட்டது! ஆலோசனையை இயக்குகிறது..."
+    autoVoiceAlert: "அதிக ஆபத்து கண்டறியப்பட்டது! ஆலோசனையை இயக்குகிறது...",
+    gotIt: "புரிந்தது."
   },
   kn: {
     title: "ಬ್ಲೂಮ್ ಸಿಂಕ್ (Bloom Sync)",
@@ -349,7 +353,8 @@ export const TRANSLATIONS: Record<Language, any> = {
     ndviTrend: "NDVI ಪ್ರವೃತ್ತಿ",
     rainfallAnomaly: "ಮಳೆ ವೈಪರೀತ್ಯ",
     climateSignal: "ಹವಾಮಾನ ಸಂಕೇತ",
-    autoVoiceAlert: "ಹೆಚ್ಚಿನ ಅಪಾಯ ಪತ್ತೆಯಾಗಿದೆ! ಸಲಹೆಯನ್ನು ಪ್ಲೇ ಮಾಡಲಾಗುತ್ತಿದೆ..."
+    autoVoiceAlert: "ಹೆಚ್ಚಿನ ಅಪಾಯ ಪತ್ತೆಯಾಗಿದೆ! ಸಲಹೆಯನ್ನು ಪ್ಲೇ ಮಾಡಲಾಗುತ್ತಿದೆ...",
+    gotIt: "ಅರ್ಥವಾಯಿತು."
   },
   ml: {
     title: "ബ്ലൂം സിങ്ക് (Bloom Sync)",
@@ -417,6 +422,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     ndviTrend: "NDVI പ്രവണത",
     rainfallAnomaly: "മഴയുടെ അപാകത",
     climateSignal: "കാലാവസ്ഥാ സിഗ്നൽ",
-    autoVoiceAlert: "ഉയർന്ന അപകടസാധ്യത കണ്ടെത്തി! ഉപദേശം പ്ലേ ചെയ്യുന്നു..."
+    autoVoiceAlert: "ഉയർന്ന അപകടസാധ്യത കണ്ടെത്തി! ഉപദേശം പ്ലേ ചെയ്യുന്നു...",
+    gotIt: "മനസ്സിലായി."
   }
 };

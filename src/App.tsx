@@ -29,7 +29,8 @@ import {
   Activity,
   Filter,
   ArrowRight,
-  Zap
+  Zap,
+  Square
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -87,8 +88,17 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'farmer' | 'map' | 'scientist' | 'history' | 'admin'>('farmer');
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(true);
+  const audioSourceRef = React.useRef<AudioBufferSourceNode | null>(null);
+  const audioContextRef = React.useRef<AudioContext | null>(null);
   const [listening, setListening] = useState(false);
+  const [isHearing, setIsHearing] = useState(false);
+  const [recognitionInstance, setRecognitionInstance] = useState<any>(null);
+  const lastProcessedTranscript = React.useRef("");
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<any | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [adminStats, setAdminStats] = useState<any>(null);
   const [mapCenter, setMapCenter] = useState<[number, number]>([17.3850, 78.4867]);
@@ -105,6 +115,14 @@ export default function App() {
   const [crop, setCrop] = useState('');
   const [location, setLocation] = useState('');
   const [date, setDate] = useState('');
+  
+  const cropRef = React.useRef(crop);
+  const locationRef = React.useRef(location);
+  const dateRef = React.useRef(date);
+
+  useEffect(() => { cropRef.current = crop; }, [crop]);
+  useEffect(() => { locationRef.current = location; }, [location]);
+  useEffect(() => { dateRef.current = date; }, [date]);
 
   // Fetch submissions on mount
   useEffect(() => {
@@ -113,6 +131,13 @@ export default function App() {
       fetchAdminStats();
     }
   }, [activeTab]);
+
+  // Re-run analysis when language changes if an analysis is active
+  useEffect(() => {
+    if (analysis && crop && location && date) {
+      handleAnalyze(new Event('submit') as any);
+    }
+  }, [lang]);
 
   const fetchAdminStats = async () => {
     try {
@@ -138,6 +163,11 @@ export default function App() {
 
   // Voice Recognition
   const startListening = () => {
+    if (listening && recognitionInstance) {
+      recognitionInstance.stop();
+      return;
+    }
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert("Voice recognition is not supported in this browser.");
       return;
@@ -156,28 +186,127 @@ export default function App() {
     };
     
     recognition.lang = langMap[lang] || 'en-US';
-    recognition.interimResults = false;
+    recognition.interimResults = true;
+    recognition.continuous = true;
     recognition.maxAlternatives = 1;
 
-    recognition.onstart = () => setListening(true);
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    recognition.onstart = () => {
+      console.log("Voice recognition started");
+      setListening(true);
+      setInterimTranscript("");
+      lastProcessedTranscript.current = "";
+      setVoiceError(null);
+    };
+    recognition.onaudiostart = () => {
+      console.log("Audio capturing started");
+    };
+    recognition.onsoundstart = () => {
+      console.log("Sound detected");
+      setIsHearing(true);
+    };
+    recognition.onsoundend = () => {
+      console.log("Sound ended");
+      setIsHearing(false);
+    };
+    recognition.onspeechstart = () => {
+      console.log("Speech detected");
+      setIsHearing(true);
+    };
+    recognition.onspeechend = () => {
+      console.log("Speech ended");
+      setIsHearing(false);
+    };
+    recognition.onend = () => {
+      console.log("Voice recognition ended");
+      setListening(false);
+      setRecognitionInstance(null);
+      // Clear interim after a delay
+      setTimeout(() => setInterimTranscript(""), 2000);
+    };
+    recognition.onnomatch = () => {
+      console.log("No match found");
+      setVoiceError("Could not understand");
+      setTimeout(() => setVoiceError(null), 2000);
+    };
+    recognition.onerror = (event: any) => {
+      console.error("Voice recognition error", event.error);
+      if (event.error === 'not-allowed') {
+        setVoiceError("Mic access blocked");
+        alert("Microphone access is blocked. Please enable permissions in browser settings.");
+      } else if (event.error === 'no-speech') {
+        setVoiceError("No speech detected");
+        setTimeout(() => setVoiceError(null), 3000);
+      } else if (event.error === 'network') {
+        setVoiceError("Network error");
+        setTimeout(() => setVoiceError(null), 3000);
+      } else {
+        setVoiceError(`Error: ${event.error}`);
+        setTimeout(() => setVoiceError(null), 3000);
+      }
+      setListening(false);
+      setRecognitionInstance(null);
+    };
 
     recognition.onresult = async (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setLoading(true);
-      try {
-        const details = await extractDetailsFromVoice(transcript, lang);
-        if (details.crop) setCrop(details.crop);
-        if (details.location) setLocation(details.location);
-        if (details.date) setDate(details.date);
-      } catch (error) {
-        console.error("Voice processing failed", error);
-      } finally {
-        setLoading(false);
+      let fullTranscript = "";
+      let currentInterim = "";
+
+      for (let i = 0; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          fullTranscript += event.results[i][0].transcript + " ";
+        } else {
+          currentInterim += event.results[i][0].transcript;
+        }
+      }
+
+      if (currentInterim) {
+        setInterimTranscript(currentInterim);
+      }
+
+      if (fullTranscript.trim()) {
+        const transcriptToProcess = fullTranscript.trim();
+        if (transcriptToProcess === lastProcessedTranscript.current) return;
+        
+        lastProcessedTranscript.current = transcriptToProcess;
+        console.log("Full transcript to process:", transcriptToProcess);
+        setInterimTranscript(transcriptToProcess);
+        
+        setLoading(true);
+        try {
+          const details = await extractDetailsFromVoice(transcriptToProcess, lang);
+          console.log("Extracted details:", details);
+          
+          let updated = false;
+          let feedbackParts = [];
+          
+          if (details.crop && details.crop.toLowerCase() !== cropRef.current.toLowerCase()) { 
+            setCrop(details.crop); 
+            updated = true; 
+            feedbackParts.push(details.crop);
+          }
+          if (details.location && details.location.toLowerCase() !== locationRef.current.toLowerCase()) { 
+            setLocation(details.location); 
+            updated = true; 
+            feedbackParts.push(`in ${details.location}`);
+          }
+          if (details.date && details.date !== dateRef.current) { 
+            setDate(details.date); 
+            updated = true; 
+          }
+          
+          if (updated && feedbackParts.length > 0) {
+             const feedbackText = `${t.gotIt} ${feedbackParts.join(" ")}.`; 
+             handleSpeak(feedbackText);
+          }
+        } catch (error) {
+          console.error("Voice processing failed", error);
+        } finally {
+          setLoading(false);
+        }
       }
     };
 
+    setRecognitionInstance(recognition);
     recognition.start();
   };
 
@@ -196,7 +325,28 @@ export default function App() {
     }
   };
 
+  const stopSpeaking = () => {
+    if (audioSourceRef.current) {
+      try {
+        audioSourceRef.current.stop();
+      } catch (e) {
+        console.error("Error stopping audio", e);
+      }
+      audioSourceRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    setSpeaking(false);
+  };
+
   const handleSpeak = async (customText?: string) => {
+    if (speaking) {
+      stopSpeaking();
+      return;
+    }
+    
     if (!analysis && !customText) return;
     
     let textToSpeak = "";
@@ -213,15 +363,43 @@ export default function App() {
       `;
     }
 
-    if (!textToSpeak || speaking) return;
+    if (!textToSpeak) return;
     
     setSpeaking(true);
     try {
       const base64Audio = await generateSpeech(textToSpeak, lang);
       if (base64Audio) {
-        const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
-        audio.onended = () => setSpeaking(false);
-        await audio.play();
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        audioContextRef.current = audioContext;
+        
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
+        const arrayBuffer = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0)).buffer;
+        
+        // Gemini TTS returns linear PCM 16-bit
+        const int16Array = new Int16Array(arrayBuffer);
+        const float32Array = new Float32Array(int16Array.length);
+        for (let i = 0; i < int16Array.length; i++) {
+          float32Array[i] = int16Array[i] / 32768;
+        }
+        
+        const audioBuffer = audioContext.createBuffer(1, float32Array.length, 24000);
+        audioBuffer.getChannelData(0).set(float32Array);
+        
+        const source = audioContext.createBufferSource();
+        audioSourceRef.current = source;
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        source.onended = () => {
+          if (audioSourceRef.current === source) {
+            setSpeaking(false);
+            audioSourceRef.current = null;
+            audioContext.close();
+            audioContextRef.current = null;
+          }
+        };
+        source.start();
       } else {
         setSpeaking(false);
       }
@@ -239,7 +417,7 @@ export default function App() {
     setMapCenter([sub.lat, sub.lng]);
     setActiveTab('farmer');
     
-    if (sub.riskLevel === 'high' && sub.fullAnalysis) {
+    if (sub.riskLevel === 'high' && sub.fullAnalysis && autoSpeak) {
       const result = sub.fullAnalysis;
       const voiceText = `
         ${t.autoVoiceAlert}.
@@ -255,6 +433,7 @@ export default function App() {
     if (!crop || !location || !date) return;
 
     setLoading(true);
+    setAnalysisError(null);
     try {
       const result = await analyzeCropMismatch(crop, location, date, lang);
       setAnalysis(result);
@@ -286,7 +465,7 @@ export default function App() {
       }
 
       // Auto-trigger voice assistant for high risk
-      if (result.riskLevel === 'high') {
+      if (result.riskLevel === 'high' && autoSpeak) {
         const voiceText = `
           ${t.autoVoiceAlert}.
           ${t.riskLevel}: ${t[result.riskLevel]}.
@@ -296,6 +475,7 @@ export default function App() {
       }
     } catch (error) {
       console.error("Analysis failed", error);
+      setAnalysisError("Analysis failed. Please check your inputs and try again.");
     } finally {
       setLoading(false);
     }
@@ -435,6 +615,16 @@ export default function App() {
           </nav>
 
           <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setAutoSpeak(!autoSpeak)}
+              className={cn(
+                "p-2 rounded-full transition-all border",
+                autoSpeak ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-stone-800/40 border-stone-700 text-stone-500"
+              )}
+              title={autoSpeak ? "Auto-Voice: ON" : "Auto-Voice: OFF"}
+            >
+              {autoSpeak ? <Volume2 size={18} /> : <VolumeX size={18} />}
+            </button>
             <select 
               value={lang}
               onChange={(e) => setLang(e.target.value as Language)}
@@ -467,19 +657,58 @@ export default function App() {
                       <Search size={20} className="text-emerald-400" />
                       {t.farmerPortal}
                     </h2>
-                    <button
-                      onClick={startListening}
-                      disabled={listening || loading}
-                      className={cn(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
-                        listening ? "bg-red-500/20 text-red-400 animate-pulse" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
+                    <div className="flex items-center gap-2">
+                      {listening && (
+                        <div className="flex gap-0.5 items-center px-1 mr-1">
+                          <span className={cn(
+                            "w-0.5 bg-emerald-500 rounded-full transition-all duration-300",
+                            isHearing ? "h-4 animate-bounce" : "h-1 opacity-50"
+                          )} style={{ animationDelay: '-0.3s' }}></span>
+                          <span className={cn(
+                            "w-0.5 bg-emerald-500 rounded-full transition-all duration-300",
+                            isHearing ? "h-6 animate-bounce" : "h-1 opacity-50"
+                          )} style={{ animationDelay: '-0.15s' }}></span>
+                          <span className={cn(
+                            "w-0.5 bg-emerald-500 rounded-full transition-all duration-300",
+                            isHearing ? "h-4 animate-bounce" : "h-1 opacity-50"
+                          )}></span>
+                        </div>
                       )}
-                    >
-                      {listening ? <MicOff size={14} /> : <Mic size={14} />}
-                      {listening ? t.listening : t.voiceInput}
-                    </button>
+                      {listening && isHearing && (
+                        <span className="text-[10px] font-bold text-emerald-400 animate-pulse mr-2">
+                          Hearing...
+                        </span>
+                      )}
+                      {voiceError && (
+                        <span className="text-[10px] font-bold text-red-400 animate-pulse bg-red-500/10 px-2 py-1 rounded-md border border-red-500/20">
+                          {voiceError}
+                        </span>
+                      )}
+                      {interimTranscript && (
+                        <span className="text-[10px] font-medium text-emerald-400 italic max-w-[100px] truncate">
+                          "{interimTranscript}"
+                        </span>
+                      )}
+                      <button
+                        onClick={startListening}
+                        disabled={loading}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
+                          listening ? "bg-red-500 text-white shadow-lg shadow-red-900/40" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
+                        )}
+                      >
+                        {listening ? <Square size={12} fill="currentColor" /> : <Mic size={14} />}
+                        {listening ? "Stop" : t.voiceInput}
+                      </button>
+                    </div>
                   </div>
                   <form onSubmit={handleAnalyze} className="space-y-4">
+                    {analysisError && (
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs font-medium flex items-center gap-2">
+                        <AlertTriangle size={14} />
+                        {analysisError}
+                      </div>
+                    )}
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">{t.cropType}</label>
                       <input 
@@ -589,13 +818,13 @@ export default function App() {
                         </div>
                         <button 
                           onClick={() => handleSpeak()}
-                          disabled={speaking}
                           className={cn(
                             "p-3 rounded-full transition-all",
-                            speaking ? "bg-emerald-500/20 text-emerald-400 animate-pulse" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
+                            speaking ? "bg-red-500/20 text-red-400" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
                           )}
+                          title={speaking ? "Stop Listening" : "Listen to Advisory"}
                         >
-                          {speaking ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                          {speaking ? <VolumeX size={20} className="animate-pulse" /> : <Volume2 size={20} />}
                         </button>
                       </div>
 

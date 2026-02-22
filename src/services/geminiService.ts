@@ -60,6 +60,7 @@ export async function analyzeCropMismatch(
     - CONVERT technical output into simple farmer-understandable language.
     - DO NOT use scientific jargon like NDVI, Anomaly, Correlation, Thermal deviation, or Pollination deficit.
     - Use simple phrases: "Too hot this season", "Too much rain during flowering", "Less insects seen", "Flowers may fall", "Fruit count may reduce".
+    - IMPORTANT: Ensure the "climaticConditions" field provides a clear, simple summary of the weather for that location and date in ${language}.
 
     ADVISORY FORMAT:
     1. What may happen: Simple explanation of the climate impact on the crop.
@@ -90,6 +91,8 @@ export async function analyzeCropMismatch(
         }
       }
     }
+    
+    If you cannot find specific data for a location, use regional averages for that crop and season.
   `;
 
   const response = await ai.models.generateContent({
@@ -170,7 +173,9 @@ export async function generateSpeech(text: string, language: string): Promise<st
                      language === 'kn' ? 'Kannada' :
                      language === 'ml' ? 'Malayalam' : 'English';
     
-    const prompt = `Speak this in ${langName}: ${text}`;
+    // For TTS models, it's often better to just provide the text if it's already in the target language,
+    // but a clear instruction can help with tone/accent.
+    const prompt = `Read this text aloud in ${langName}: ${text}`;
     
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
@@ -203,17 +208,25 @@ export async function extractDetailsFromVoice(transcript: string, language: stri
                      language === 'ml' ? 'Malayalam' : 'English';
 
     const prompt = `
-      You are an agricultural data extractor. 
-      Extract details from this transcript: "${transcript}"
-      The transcript is in ${langName}.
+      You are an expert agricultural data extractor. 
+      The following transcript is from a farmer speaking about their crop, location, and target date.
+      The transcript is primarily in ${langName}, but may contain some English words.
       
-      Return a JSON object with:
-      - "crop": The name of the crop mentioned.
-      - "location": The city or region mentioned.
-      - "date": The target date mentioned (convert to YYYY-MM-DD if possible).
+      Transcript: "${transcript}"
       
-      If a detail is not found, do not include it in the JSON.
-      Only return the JSON object.
+      TASK:
+      Extract the following details from the transcript:
+      1. "crop": The name of the crop (e.g., Mango, Rice, Cotton, Tomato).
+      2. "location": The city, district, village, or region.
+      3. "date": The target date, month, or season. If a month is mentioned, convert it to a date format like "2024-05-01" or just the month name if year is unknown.
+      
+      RULES:
+      - Return a valid JSON object.
+      - If a detail is missing, omit the key or set it to null.
+      - Be smart about synonyms (e.g., "Paddy" -> "Rice").
+      - If the transcript is in a local language, translate the extracted values to English for the form fields.
+      
+      JSON OUTPUT ONLY:
     `;
 
     const response = await ai.models.generateContent({

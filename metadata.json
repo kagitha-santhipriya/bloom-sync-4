@@ -1,5 +1,5 @@
 {
   "name": "Bloom Sync",
   "description": "A comprehensive dashboard for farmers and scientists to analyze crop blooming and pollination mismatches using satellite-derived data and AI insights.",
-  "requestFramePermissions": ["geolocation"]
+  "requestFramePermissions": ["geolocation", "microphone"]
 }
