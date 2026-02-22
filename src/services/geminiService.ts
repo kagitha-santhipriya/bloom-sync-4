@@ -161,12 +161,20 @@ export async function analyzeCropMismatch(
   return JSON.parse(response.text || "{}");
 }
 
-export async function generateSpeech(text: string): Promise<string | undefined> {
+export async function generateSpeech(text: string, language: string): Promise<string | undefined> {
   try {
     const ai = getAI();
+    const langName = language === 'te' ? 'Telugu' : 
+                     language === 'hi' ? 'Hindi' :
+                     language === 'ta' ? 'Tamil' :
+                     language === 'kn' ? 'Kannada' :
+                     language === 'ml' ? 'Malayalam' : 'English';
+    
+    const prompt = `Speak this in ${langName}: ${text}`;
+    
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text }] }],
+      contents: [{ parts: [{ text: prompt }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
@@ -184,14 +192,28 @@ export async function generateSpeech(text: string): Promise<string | undefined> 
   }
 }
 
-export async function extractDetailsFromVoice(transcript: string): Promise<{ crop?: string; location?: string; date?: string }> {
+export async function extractDetailsFromVoice(transcript: string, language: string): Promise<{ crop?: string; location?: string; date?: string }> {
   try {
     const ai = getAI();
     const model = "gemini-3-flash-preview";
+    const langName = language === 'te' ? 'Telugu' : 
+                     language === 'hi' ? 'Hindi' :
+                     language === 'ta' ? 'Tamil' :
+                     language === 'kn' ? 'Kannada' :
+                     language === 'ml' ? 'Malayalam' : 'English';
+
     const prompt = `
-      Extract agricultural details from this transcript: "${transcript}"
-      Return a JSON object with "crop", "location", and "date" (YYYY-MM-DD format if possible).
-      If a detail is missing, omit it.
+      You are an agricultural data extractor. 
+      Extract details from this transcript: "${transcript}"
+      The transcript is in ${langName}.
+      
+      Return a JSON object with:
+      - "crop": The name of the crop mentioned.
+      - "location": The city or region mentioned.
+      - "date": The target date mentioned (convert to YYYY-MM-DD if possible).
+      
+      If a detail is not found, do not include it in the JSON.
+      Only return the JSON object.
     `;
 
     const response = await ai.models.generateContent({

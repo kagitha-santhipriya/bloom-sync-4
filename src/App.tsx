@@ -142,7 +142,17 @@ export default function App() {
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    recognition.lang = lang;
+    
+    const langMap: Record<string, string> = {
+      'en': 'en-US',
+      'te': 'te-IN',
+      'hi': 'hi-IN',
+      'ta': 'ta-IN',
+      'kn': 'kn-IN',
+      'ml': 'ml-IN'
+    };
+    
+    recognition.lang = langMap[lang] || 'en-US';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
@@ -154,7 +164,7 @@ export default function App() {
       const transcript = event.results[0][0].transcript;
       setLoading(true);
       try {
-        const details = await extractDetailsFromVoice(transcript);
+        const details = await extractDetailsFromVoice(transcript, lang);
         if (details.crop) setCrop(details.crop);
         if (details.location) setLocation(details.location);
         if (details.date) setDate(details.date);
@@ -204,7 +214,7 @@ export default function App() {
     
     setSpeaking(true);
     try {
-      const base64Audio = await generateSpeech(textToSpeak);
+      const base64Audio = await generateSpeech(textToSpeak, lang);
       if (base64Audio) {
         const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
         audio.onended = () => setSpeaking(false);
@@ -227,7 +237,13 @@ export default function App() {
     setActiveTab('farmer');
     
     if (sub.riskLevel === 'high' && sub.fullAnalysis) {
-      handleSpeak(`${t.autoVoiceAlert} ${sub.fullAnalysis.suggestions}`);
+      const result = sub.fullAnalysis;
+      const voiceText = `
+        ${t.autoVoiceAlert}.
+        ${t.riskLevel}: ${t[result.riskLevel]}.
+        ${t.whatMayHappen}: ${result.advisory.whatMayHappen}.
+      `;
+      handleSpeak(voiceText);
     }
   };
 
