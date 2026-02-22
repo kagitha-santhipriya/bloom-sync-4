@@ -229,18 +229,29 @@ export default function App() {
       setTimeout(() => setVoiceError(null), 2000);
     };
     recognition.onerror = (event: any) => {
-      console.error("Voice recognition error", event.error);
-      if (event.error === 'not-allowed') {
+      const error = event.error;
+      
+      // Only log actual errors, not expected lifecycle events
+      if (error !== 'no-speech' && error !== 'aborted') {
+        console.error("Voice recognition error", error);
+      }
+
+      if (error === 'not-allowed') {
         setVoiceError("Mic access blocked");
         alert("Microphone access is blocked. Please enable permissions in browser settings.");
-      } else if (event.error === 'no-speech') {
-        setVoiceError("No speech detected");
-        setTimeout(() => setVoiceError(null), 3000);
-      } else if (event.error === 'network') {
+      } else if (error === 'no-speech') {
+        // Silently handle no-speech timeout
+        console.log("No speech detected (timeout)");
+      } else if (error === 'network') {
         setVoiceError("Network error");
         setTimeout(() => setVoiceError(null), 3000);
+      } else if (error === 'aborted') {
+        console.log("Recognition aborted");
+      } else if (error === 'audio-capture') {
+        setVoiceError("Microphone not found");
+        setTimeout(() => setVoiceError(null), 3000);
       } else {
-        setVoiceError(`Error: ${event.error}`);
+        setVoiceError(`Error: ${error}`);
         setTimeout(() => setVoiceError(null), 3000);
       }
       setListening(false);
@@ -696,8 +707,9 @@ export default function App() {
                           "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
                           listening ? "bg-red-500 text-white shadow-lg shadow-red-900/40" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
                         )}
+                        title={listening ? "Stop Listening" : "Start Voice Input"}
                       >
-                        {listening ? <Square size={12} fill="currentColor" /> : <Mic size={14} />}
+                        {listening ? <Square size={12} fill="currentColor" className="animate-pulse" /> : <Mic size={14} />}
                         {listening ? "Stop" : t.voiceInput}
                       </button>
                     </div>
@@ -834,6 +846,29 @@ export default function App() {
                             <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">{t.whatMayHappen}</h3>
                             <p className="text-stone-200 leading-relaxed">{analysis.advisory.whatMayHappen}</p>
                           </div>
+                          
+                          {analysis.sources && analysis.sources.length > 0 && (
+                            <div className="bg-stone-950/40 p-4 rounded-xl border border-stone-800">
+                              <h3 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                <Globe size={14} />
+                                Verified Sources
+                              </h3>
+                              <div className="space-y-2">
+                                {analysis.sources.slice(0, 3).map((source: any, idx: number) => (
+                                  <a 
+                                    key={idx} 
+                                    href={source.url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="block text-[10px] text-stone-400 hover:text-blue-400 transition-colors truncate"
+                                  >
+                                    • {source.title || source.url}
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="bg-stone-950/40 p-4 rounded-xl border border-stone-800">
                             <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">{t.expectedYield}</h3>
                             <p className="text-2xl font-bold text-stone-100">{analysis.advisory.expectedYieldChange}</p>

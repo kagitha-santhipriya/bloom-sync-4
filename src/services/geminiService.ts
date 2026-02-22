@@ -32,6 +32,7 @@ export interface AnalysisResult {
   lng: number;
   advisory: FarmerAdvisory;
   climaticConditions: string;
+  sources?: { title: string; url: string }[];
 }
 
 export async function analyzeCropMismatch(
@@ -51,16 +52,24 @@ export async function analyzeCropMismatch(
     Target Date: ${date}
     Response Language: ${language}
 
+    MANDATORY: Use Google Search to find:
+    1. Current and forecasted weather (temperature, rainfall, humidity) for ${location} around ${date}.
+    2. Specific agricultural challenges, pest alerts, or government advisories in ${location} for ${crop} during this season.
+    3. Historical blooming and harvest patterns of ${crop} in this specific region.
+
     SYSTEM STRUCTURE:
     Layer 1 – Global Climate Intelligence Engine (Internal Processing)
     - Process temperature/rainfall forecasts, seasonal anomalies, vegetation trends, and pollinator activity.
-    - Calculate Risk Score (0-10) and Yield Impact.
+    - Calculate Risk Score (0-10) and Yield Impact based on REAL-TIME data found via search.
+    - If search results indicate a heatwave, drought, or unseasonal rain, reflect this in the risk score.
 
     Layer 2 – Farmer Advisory Layer (Output)
     - CONVERT technical output into simple farmer-understandable language.
     - DO NOT use scientific jargon like NDVI, Anomaly, Correlation, Thermal deviation, or Pollination deficit.
     - Use simple phrases: "Too hot this season", "Too much rain during flowering", "Less insects seen", "Flowers may fall", "Fruit count may reduce".
     - IMPORTANT: Ensure the "climaticConditions" field provides a clear, simple summary of the weather for that location and date in ${language}.
+    - ADVICE MUST BE SPECIFIC: If you suggest a precaution, make sure it's relevant to the specific weather threat found in search (e.g., "Use shade nets if it's too hot" or "Ensure drainage if heavy rain is expected").
+    - Mention real local factors if found (e.g., "Local reports say this year is drier than usual").
 
     ADVISORY FORMAT:
     1. What may happen: Simple explanation of the climate impact on the crop.
@@ -99,6 +108,7 @@ export async function analyzeCropMismatch(
     model,
     contents: prompt,
     config: {
+      tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -161,7 +171,20 @@ export async function analyzeCropMismatch(
     }
   });
 
-  return JSON.parse(response.text || "{}");
+  const result = JSON.parse(response.text || "{}");
+  
+  // Extract grounding sources
+  const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+  if (chunks) {
+    result.sources = chunks
+      .filter((c: any) => c.web)
+      .map((c: any) => ({
+        title: c.web.title,
+        url: c.web.uri
+      }));
+  }
+
+  return result;
 }
 
 export async function generateSpeech(text: string, language: string): Promise<string | undefined> {
