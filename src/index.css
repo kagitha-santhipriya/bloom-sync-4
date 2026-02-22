@@ -7,7 +7,10 @@
 
 body {
   @apply bg-stone-950 text-stone-100 font-sans min-h-screen relative;
-  background-image: linear-gradient(to bottom, rgba(12, 10, 9, 0.9), rgba(12, 10, 9, 0.95)), url('https://picsum.photos/seed/agriculture-bees/1920/1080?blur=3');
+  background-image: 
+    radial-gradient(circle at center, rgba(12, 10, 9, 0.2) 0%, rgba(12, 10, 9, 0.8) 100%),
+    linear-gradient(to bottom, rgba(12, 10, 9, 0.4), rgba(12, 10, 9, 0.6)),
+    url('https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&q=80&w=1920');
   background-attachment: fixed;
   background-size: cover;
   background-position: center;

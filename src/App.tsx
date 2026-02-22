@@ -27,7 +27,9 @@ import {
   RefreshCw,
   Download,
   Activity,
-  Filter
+  Filter,
+  ArrowRight,
+  Zap
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -80,6 +82,7 @@ if (typeof window !== 'undefined' && L.Icon.Default) {
 }
 
 export default function App() {
+  const [showLanding, setShowLanding] = useState(true);
   const [lang, setLang] = useState<Language>('en');
   const [activeTab, setActiveTab] = useState<'farmer' | 'map' | 'scientist' | 'history' | 'admin'>('farmer');
   const [loading, setLoading] = useState(false);
@@ -298,12 +301,76 @@ export default function App() {
     }
   };
 
+  if (showLanding) {
+    return (
+      <div className="min-h-screen flex flex-col relative overflow-hidden">
+        {/* Landing Header */}
+        <header className="absolute top-0 left-0 right-0 z-50 p-6">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sprout className="text-emerald-500" size={32} />
+              <h1 className="text-2xl font-bold text-white tracking-tight">BloomSync</h1>
+            </div>
+            <div className="flex items-center gap-4">
+              <select 
+                value={lang}
+                onChange={(e) => setLang(e.target.value as Language)}
+                className="bg-stone-900/60 backdrop-blur-md text-white px-3 py-1.5 rounded-lg border border-stone-700 text-sm outline-none cursor-pointer"
+              >
+                {LANGUAGES.map(l => (
+                  <option key={l.code} value={l.code} className="bg-stone-900">{l.name}</option>
+                ))}
+              </select>
+              <button 
+                onClick={() => setShowLanding(false)}
+                className="bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold px-6 py-2 rounded-full transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+              >
+                Get Started
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Hero Section */}
+        <main className="flex-1 flex flex-col items-center justify-center text-center px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="max-w-5xl"
+          >
+            <h2 className="text-7xl md:text-[10rem] font-bold text-white mb-6 tracking-tighter leading-none">
+              Welcome to<br />BloomSync
+            </h2>
+            <p className="text-xl md:text-3xl text-stone-300 mb-12 font-medium tracking-tight">
+              Real-Time Climate & Crop Advisory
+            </p>
+            <button 
+              onClick={() => setShowLanding(false)}
+              className="group bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-bold px-10 py-4 rounded-full text-xl transition-all flex items-center gap-3 mx-auto shadow-[0_0_30px_rgba(16,185,129,0.4)]"
+            >
+              Get Started
+              <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          </motion.div>
+        </main>
+
+        {/* Bottom Left Icon */}
+        <div className="absolute bottom-8 left-8">
+          <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-stone-900 shadow-lg">
+            <Zap size={20} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
       <header className="bg-stone-900/40 backdrop-blur-md border-b border-stone-800 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowLanding(true)}>
             <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-900/20">
               <Sprout size={24} />
             </div>
