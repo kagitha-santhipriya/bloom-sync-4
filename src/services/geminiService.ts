@@ -274,3 +274,53 @@ export async function extractDetailsFromVoice(transcript: string, language: stri
     return {};
   }
 }
+
+export async function askFollowUp(
+  question: string,
+  context: AnalysisResult,
+  language: string
+): Promise<string> {
+  try {
+    const ai = getAI();
+    const model = "gemini-3-flash-preview";
+    const langName = language === 'te' ? 'Telugu' : 
+                     language === 'hi' ? 'Hindi' :
+                     language === 'ta' ? 'Tamil' :
+                     language === 'kn' ? 'Kannada' :
+                     language === 'ml' ? 'Malayalam' : 'English';
+
+    const prompt = `
+      You are a NASA agricultural scientist assistant. 
+      The user has just received an analysis for their crop:
+      
+      CONTEXT:
+      Crop: ${context.climaticConditions} (Summary)
+      Risk Level: ${context.riskLevel}
+      Risk Score: ${context.riskScore}/10
+      Advisory: ${context.advisory.whatMayHappen}
+      Expected Yield: ${context.advisory.expectedYieldChange}
+      
+      USER QUESTION: "${question}"
+      
+      TASK:
+      Answer the user's question based on the provided context and your general agricultural knowledge.
+      Keep the answer simple, practical, and helpful for a farmer.
+      Respond in ${langName}.
+      
+      RESPONSE:
+    `;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }]
+      }
+    });
+
+    return response.text || "I'm sorry, I couldn't process that question.";
+  } catch (error) {
+    console.error("Follow-up question failed", error);
+    return "An error occurred while processing your question.";
+  }
+}

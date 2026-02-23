@@ -52,7 +52,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { analyzeCropMismatch, AnalysisResult, generateSpeech, extractDetailsFromVoice } from './services/geminiService';
+import { analyzeCropMismatch, AnalysisResult, generateSpeech, extractDetailsFromVoice, askFollowUp } from './services/geminiService';
 import { TRANSLATIONS, LANGUAGES, Language, Submission } from './constants';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -98,6 +98,9 @@ export default function App() {
   const [interimTranscript, setInterimTranscript] = useState("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<any | null>(null);
+  const [followUpQuestion, setFollowUpQuestion] = useState("");
+  const [followUpAnswer, setFollowUpAnswer] = useState("");
+  const [followUpLoading, setFollowUpLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [adminStats, setAdminStats] = useState<any>(null);
@@ -336,6 +339,24 @@ export default function App() {
     }
   };
 
+  const handleFollowUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!followUpQuestion.trim() || !analysis) return;
+    
+    setFollowUpLoading(true);
+    try {
+      const answer = await askFollowUp(followUpQuestion, analysis, lang);
+      setFollowUpAnswer(answer);
+      if (autoSpeak) {
+        handleSpeak(answer);
+      }
+    } catch (error) {
+      console.error("Follow-up failed", error);
+    } finally {
+      setFollowUpLoading(false);
+    }
+  };
+
   const stopSpeaking = () => {
     if (audioSourceRef.current) {
       try {
@@ -445,6 +466,9 @@ export default function App() {
 
     setLoading(true);
     setAnalysisError(null);
+    setAnalysis(null);
+    setFollowUpAnswer("");
+    setFollowUpQuestion("");
     try {
       const result = await analyzeCropMismatch(crop, location, date, lang);
       setAnalysis(result);
@@ -873,6 +897,44 @@ export default function App() {
                             <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">{t.expectedYield}</h3>
                             <p className="text-2xl font-bold text-stone-100">{analysis.advisory.expectedYieldChange}</p>
                           </div>
+                        </div>
+
+                        {/* Follow-up Question Section */}
+                        <div className="bg-stone-950/40 p-6 rounded-2xl border border-stone-800/50 mt-6">
+                          <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Zap size={16} className="text-yellow-400" />
+                            {t.askAgent}
+                          </h3>
+                          
+                          <form onSubmit={handleFollowUp} className="relative mb-4">
+                            <input
+                              type="text"
+                              value={followUpQuestion}
+                              onChange={(e) => setFollowUpQuestion(e.target.value)}
+                              placeholder={t.askPlaceholder}
+                              className="w-full bg-stone-900/50 border border-stone-800 rounded-xl py-3 px-4 pr-12 text-sm text-stone-200 focus:outline-none focus:border-emerald-500/50 transition-all"
+                            />
+                            <button
+                              type="submit"
+                              disabled={followUpLoading || !followUpQuestion.trim()}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-emerald-500 hover:text-emerald-400 disabled:opacity-50 transition-all"
+                            >
+                              {followUpLoading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+                            </button>
+                          </form>
+
+                          <AnimatePresence>
+                            {followUpAnswer && (
+                              <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 10 }}
+                                className="p-4 bg-stone-900/30 rounded-xl border border-stone-800/50 text-sm text-stone-300 leading-relaxed"
+                              >
+                                {followUpAnswer}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
 
                         <div className="space-y-4">

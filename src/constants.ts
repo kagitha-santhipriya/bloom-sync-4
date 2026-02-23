@@ -89,7 +89,10 @@ export const TRANSLATIONS: Record<Language, any> = {
     rainfallAnomaly: "Rainfall Anomaly",
     climateSignal: "Climate Signal",
     autoVoiceAlert: "High Risk Detected! Playing Advisory...",
-    gotIt: "Got it."
+    gotIt: "Got it.",
+    askAgent: "Ask Agent",
+    askPlaceholder: "Ask a follow-up question...",
+    asking: "Asking..."
   },
   te: {
     title: "బ్లూమ్ సింక్ (Bloom Sync)",
@@ -147,7 +150,10 @@ export const TRANSLATIONS: Record<Language, any> = {
     listening: "వింటున్నాను...",
     stopListening: "ఆపు",
     voiceAssistant: "వాయిస్ అసిస్టెంట్",
-    gotIt: "అర్థమైంది."
+    gotIt: "అర్థమైంది.",
+    askAgent: "ఏజెంట్‌ని అడగండి",
+    askPlaceholder: "తదుపరి ప్రశ్న అడగండి...",
+    asking: "అడుగుతోంది..."
   },
   hi: {
     title: "ब्लूम सिंक (Bloom Sync)",
@@ -216,7 +222,10 @@ export const TRANSLATIONS: Record<Language, any> = {
     rainfallAnomaly: "वर्षा विसंगति",
     climateSignal: "जलवायु संकेत",
     autoVoiceAlert: "उच्च जोखिम का पता चला! सलाहकार बजा रहा है...",
-    gotIt: "समझ गया।"
+    gotIt: "समझ गया।",
+    askAgent: "एजेंट से पूछें",
+    askPlaceholder: "एक अनुवर्ती प्रश्न पूछें...",
+    asking: "पूछ रहा है..."
   },
   ta: {
     title: "ப்ளூம் சிங்க் (Bloom Sync)",
@@ -285,7 +294,10 @@ export const TRANSLATIONS: Record<Language, any> = {
     rainfallAnomaly: "மழைப்பொழிவு ஒழுங்கின்மை",
     climateSignal: "காலநிலை சமிக்ஞை",
     autoVoiceAlert: "அதிக ஆபத்து கண்டறியப்பட்டது! ஆலோசனையை இயக்குகிறது...",
-    gotIt: "புரிந்தது."
+    gotIt: "புரிந்தது.",
+    askAgent: "ஏஜெண்டிடம் கேளுங்கள்",
+    askPlaceholder: "தொடர் கேள்வியைக் கேளுங்கள்...",
+    asking: "கேட்கிறது..."
   },
   kn: {
     title: "ಬ್ಲೂಮ್ ಸಿಂಕ್ (Bloom Sync)",
@@ -354,7 +366,10 @@ export const TRANSLATIONS: Record<Language, any> = {
     rainfallAnomaly: "ಮಳೆ ವೈಪರೀತ್ಯ",
     climateSignal: "ಹವಾಮಾನ ಸಂಕೇತ",
     autoVoiceAlert: "ಹೆಚ್ಚಿನ ಅಪಾಯ ಪತ್ತೆಯಾಗಿದೆ! ಸಲಹೆಯನ್ನು ಪ್ಲೇ ಮಾಡಲಾಗುತ್ತಿದೆ...",
-    gotIt: "ಅರ್ಥವಾಯಿತು."
+    gotIt: "ಅರ್ಥವಾಯಿತು.",
+    askAgent: "ಏಜೆಂಟ್ ಅನ್ನು ಕೇಳಿ",
+    askPlaceholder: "ಮುಂದಿನ ಪ್ರಶ್ನೆಯನ್ನು ಕೇಳಿ...",
+    asking: "ಕೇಳುತ್ತಿದೆ..."
   },
   ml: {
     title: "ബ്ലൂം സിങ്ക് (Bloom Sync)",
@@ -423,6 +438,9 @@ export const TRANSLATIONS: Record<Language, any> = {
     rainfallAnomaly: "മഴയുടെ അപാകത",
     climateSignal: "കാലാവസ്ഥാ സിഗ്നൽ",
     autoVoiceAlert: "ഉയർന്ന അപകടസാധ്യത കണ്ടെത്തി! ഉപദേശം പ്ലേ ചെയ്യുന്നു...",
-    gotIt: "മനസ്സിലായി."
+    gotIt: "മനസ്സിലായി.",
+    askAgent: "ഏജന്റിനോട് ചോദിക്കുക",
+    askPlaceholder: "തുടർന്നുള്ള ചോദ്യം ചോദിക്കുക...",
+    asking: "ചോദിക്കുന്നു..."
   }
 };
