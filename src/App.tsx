@@ -275,11 +275,13 @@ export default function App() {
       let fullTranscript = "";
       let currentInterim = "";
 
-      for (let i = 0; i < event.results.length; ++i) {
+      // Process all results to build the full transcript
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          fullTranscript += event.results[i][0].transcript + " ";
+          fullTranscript += transcript;
         } else {
-          currentInterim += event.results[i][0].transcript;
+          currentInterim += transcript;
         }
       }
 
@@ -287,22 +289,25 @@ export default function App() {
         setInterimTranscript(currentInterim);
       }
 
-      if (fullTranscript.trim()) {
-        const transcriptToProcess = fullTranscript.trim();
-        if (transcriptToProcess === lastProcessedTranscript.current) return;
-        
-        lastProcessedTranscript.current = transcriptToProcess;
-        console.log("Full transcript to process:", transcriptToProcess);
-        setInterimTranscript(transcriptToProcess);
+      // If we have a final result, process it
+      const finalTranscript = Array.from(event.results)
+        .filter((res: any) => res.isFinal)
+        .map((res: any) => res[0].transcript)
+        .join(' ')
+        .trim();
+
+      if (finalTranscript && finalTranscript !== lastProcessedTranscript.current) {
+        lastProcessedTranscript.current = finalTranscript;
+        setInterimTranscript(""); // Clear interim when we have final
         
         if (voiceTarget === 'chatbot') {
-          setFollowUpQuestion(transcriptToProcess);
+          setFollowUpQuestion(finalTranscript);
           return;
         }
 
         setLoading(true);
         try {
-          const details = await extractDetailsFromVoice(transcriptToProcess, lang);
+          const details = await extractDetailsFromVoice(finalTranscript, voiceLang);
           console.log("Extracted details:", details);
           
           let updated = false;
@@ -767,9 +772,14 @@ export default function App() {
                         </span>
                       )}
                       {interimTranscript && (
-                        <span className="text-[10px] font-medium text-emerald-400 italic max-w-[100px] truncate">
-                          "{interimTranscript}"
-                        </span>
+                        <div className="absolute bottom-full left-0 mb-2 bg-emerald-600 text-white text-[10px] px-3 py-1.5 rounded-lg shadow-xl animate-in fade-in slide-in-from-bottom-2 duration-300 z-10 flex items-center gap-2 border border-emerald-500/50">
+                          <div className="flex gap-0.5">
+                            <span className="w-0.5 h-2 bg-white/50 animate-bounce"></span>
+                            <span className="w-0.5 h-3 bg-white animate-bounce" style={{ animationDelay: '0.1s' }}></span>
+                            <span className="w-0.5 h-2 bg-white/50 animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+                          </div>
+                          <span className="font-medium italic">"{interimTranscript}"</span>
+                        </div>
                       )}
                       <div className="flex items-center gap-2">
                         <select
@@ -988,13 +998,21 @@ export default function App() {
                                   type="button"
                                   onClick={() => startListening('chatbot')}
                                   className={cn(
-                                    "p-2 rounded-lg transition-all",
-                                    listening && voiceTarget === 'chatbot' ? "text-red-500 animate-pulse" : "text-stone-500 hover:text-emerald-500"
+                                    "p-2 rounded-lg transition-all relative",
+                                    listening && voiceTarget === 'chatbot' ? "text-red-500" : "text-stone-500 hover:text-emerald-500"
                                   )}
                                 >
-                                  <Mic size={18} />
+                                  {listening && voiceTarget === 'chatbot' && (
+                                    <span className="absolute inset-0 rounded-lg bg-red-500/20 animate-ping"></span>
+                                  )}
+                                  <Mic size={18} className={cn(listening && voiceTarget === 'chatbot' && "animate-pulse")} />
                                 </button>
                               </div>
+                              {listening && voiceTarget === 'chatbot' && interimTranscript && (
+                                <div className="absolute bottom-full left-0 mb-2 bg-stone-900 border border-stone-800 p-2 rounded-lg text-[10px] text-emerald-400 italic shadow-2xl z-10 animate-in fade-in slide-in-from-bottom-1">
+                                  "{interimTranscript}"
+                                </div>
+                              )}
                             </div>
                             <button
                               type="submit"
