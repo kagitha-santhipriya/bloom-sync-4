@@ -85,6 +85,7 @@ if (typeof window !== 'undefined' && L.Icon.Default) {
 export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [lang, setLang] = useState<Language>('en');
+  const [voiceLang, setVoiceLang] = useState<Language>('en');
   const [activeTab, setActiveTab] = useState<'farmer' | 'map' | 'scientist' | 'history' | 'admin'>('farmer');
   const [loading, setLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -92,6 +93,7 @@ export default function App() {
   const audioSourceRef = React.useRef<AudioBufferSourceNode | null>(null);
   const audioContextRef = React.useRef<AudioContext | null>(null);
   const [listening, setListening] = useState(false);
+  const [voiceTarget, setVoiceTarget] = useState<'form' | 'chatbot'>('form');
   const [isHearing, setIsHearing] = useState(false);
   const [recognitionInstance, setRecognitionInstance] = useState<any>(null);
   const lastProcessedTranscript = React.useRef("");
@@ -142,34 +144,42 @@ export default function App() {
     }
   }, [lang]);
 
-  const fetchAdminStats = async () => {
+  const fetchAdminStats = async (retries = 3) => {
     try {
-      const response = await fetch('/api/admin/stats');
+      const response = await fetch(`${window.location.origin}/api/admin/stats`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       setAdminStats(data);
     } catch (error) {
       console.error("Failed to fetch admin stats", error);
+      if (retries > 0) {
+        setTimeout(() => fetchAdminStats(retries - 1), 1000);
+      }
     }
   };
 
-  const fetchSubmissions = async () => {
+  const fetchSubmissions = async (retries = 3) => {
     try {
-      const response = await fetch('/api/submissions');
-      if (response.ok) {
-        const data = await response.json();
-        setSubmissions(data);
-      }
+      const response = await fetch(`${window.location.origin}/api/submissions`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setSubmissions(data);
     } catch (error) {
       console.error("Failed to fetch submissions", error);
+      if (retries > 0) {
+        setTimeout(() => fetchSubmissions(retries - 1), 1000);
+      }
     }
   };
 
   // Voice Recognition
-  const startListening = () => {
+  const startListening = (target: 'form' | 'chatbot' = 'form') => {
     if (listening && recognitionInstance) {
       recognitionInstance.stop();
       return;
     }
+
+    setVoiceTarget(target);
 
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert("Voice recognition is not supported in this browser.");
@@ -188,7 +198,7 @@ export default function App() {
       'ml': 'ml-IN'
     };
     
-    recognition.lang = langMap[lang] || 'en-US';
+    recognition.lang = langMap[voiceLang] || 'en-US';
     recognition.interimResults = true;
     recognition.continuous = true;
     recognition.maxAlternatives = 1;
@@ -285,6 +295,11 @@ export default function App() {
         console.log("Full transcript to process:", transcriptToProcess);
         setInterimTranscript(transcriptToProcess);
         
+        if (voiceTarget === 'chatbot') {
+          setFollowUpQuestion(transcriptToProcess);
+          return;
+        }
+
         setLoading(true);
         try {
           const details = await extractDetailsFromVoice(transcriptToProcess, lang);
@@ -321,13 +336,34 @@ export default function App() {
     };
 
     setRecognitionInstance(recognition);
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error("Failed to start recognition", e);
+      setVoiceError("Could not start microphone");
+      setListening(false);
+      setRecognitionInstance(null);
+    }
   };
+
+  const chartData = React.useMemo(() => {
+    if (!analysis) return [];
+    return analysis.bloomingData.map((item: any, index: number) => ({
+      ...item,
+      pollinationActivity: analysis.pollinationData[index]?.activity || 0
+    }));
+  }, [analysis]);
+
+  useEffect(() => {
+    return () => {
+      stopSpeaking();
+    };
+  }, []);
 
   const handleChoice = async (choice: 'A' | 'B') => {
     if (!currentSubmissionId) return;
     try {
-      await fetch(`/api/submissions/${currentSubmissionId}/choice`, {
+      await fetch(`${window.location.origin}/api/submissions/${currentSubmissionId}/choice`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ choice }),
@@ -486,7 +522,7 @@ export default function App() {
       };
 
       // Save to backend
-      const response = await fetch('/api/submissions', {
+      const response = await fetch(`${window.location.origin}/api/submissions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSubmission),
@@ -650,16 +686,27 @@ export default function App() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setAutoSpeak(!autoSpeak)}
-              className={cn(
-                "p-2 rounded-full transition-all border",
-                autoSpeak ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-stone-800/40 border-stone-700 text-stone-500"
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={() => setAutoSpeak(!autoSpeak)}
+                className={cn(
+                  "p-2 rounded-full transition-all border",
+                  autoSpeak ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-stone-800/40 border-stone-700 text-stone-500"
+                )}
+                title={autoSpeak ? "Auto-Voice: ON" : "Auto-Voice: OFF"}
+              >
+                {autoSpeak ? <Volume2 size={18} /> : <VolumeX size={18} />}
+              </button>
+              {speaking && (
+                <button 
+                  onClick={stopSpeaking}
+                  className="p-2 rounded-full bg-red-500/20 border border-red-500/30 text-red-400 animate-pulse"
+                  title="Stop Speaking"
+                >
+                  <Square size={16} fill="currentColor" />
+                </button>
               )}
-              title={autoSpeak ? "Auto-Voice: ON" : "Auto-Voice: OFF"}
-            >
-              {autoSpeak ? <Volume2 size={18} /> : <VolumeX size={18} />}
-            </button>
+            </div>
             <select 
               value={lang}
               onChange={(e) => setLang(e.target.value as Language)}
@@ -724,18 +771,29 @@ export default function App() {
                           "{interimTranscript}"
                         </span>
                       )}
-                      <button
-                        onClick={startListening}
-                        disabled={loading}
-                        className={cn(
-                          "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
-                          listening ? "bg-red-500 text-white shadow-lg shadow-red-900/40" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
-                        )}
-                        title={listening ? "Stop Listening" : "Start Voice Input"}
-                      >
-                        {listening ? <Square size={12} fill="currentColor" className="animate-pulse" /> : <Mic size={14} />}
-                        {listening ? "Stop" : t.voiceInput}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={voiceLang}
+                          onChange={(e) => setVoiceLang(e.target.value as Language)}
+                          className="bg-stone-800/40 text-stone-400 text-[10px] font-bold px-2 py-1 rounded-md border border-stone-700 outline-none focus:border-emerald-500/50"
+                        >
+                          {LANGUAGES.map(l => (
+                            <option key={l.code} value={l.code}>{l.name.split(' ')[0]}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => startListening('form')}
+                          disabled={loading}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all",
+                            listening && voiceTarget === 'form' ? "bg-red-500 text-white shadow-lg shadow-red-900/40" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
+                          )}
+                          title={listening ? "Stop Listening" : "Start Voice Input"}
+                        >
+                          {listening && voiceTarget === 'form' ? <Square size={12} fill="currentColor" className="animate-pulse" /> : <Mic size={14} />}
+                          {listening && voiceTarget === 'form' ? "Stop" : t.voiceInput}
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <form onSubmit={handleAnalyze} className="space-y-4">
@@ -855,12 +913,13 @@ export default function App() {
                         <button 
                           onClick={() => handleSpeak()}
                           className={cn(
-                            "p-3 rounded-full transition-all",
-                            speaking ? "bg-red-500/20 text-red-400" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
+                            "p-3 rounded-full transition-all flex items-center gap-2",
+                            speaking ? "bg-red-500 text-white shadow-lg shadow-red-900/40" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
                           )}
-                          title={speaking ? "Stop Listening" : "Listen to Advisory"}
+                          title={speaking ? "Stop Speaking" : "Listen to Advisory"}
                         >
-                          {speaking ? <VolumeX size={20} className="animate-pulse" /> : <Volume2 size={20} />}
+                          {speaking ? <Square size={20} fill="currentColor" className="animate-pulse" /> : <Volume2 size={20} />}
+                          {speaking && <span className="text-[10px] font-bold uppercase tracking-widest">Stop</span>}
                         </button>
                       </div>
 
@@ -906,18 +965,41 @@ export default function App() {
                             {t.askAgent}
                           </h3>
                           
-                          <form onSubmit={handleFollowUp} className="relative mb-4">
-                            <input
-                              type="text"
-                              value={followUpQuestion}
-                              onChange={(e) => setFollowUpQuestion(e.target.value)}
-                              placeholder={t.askPlaceholder}
-                              className="w-full bg-stone-900/50 border border-stone-800 rounded-xl py-3 px-4 pr-12 text-sm text-stone-200 focus:outline-none focus:border-emerald-500/50 transition-all"
-                            />
+                          <form onSubmit={handleFollowUp} className="relative mb-4 flex gap-2">
+                            <div className="relative flex-1">
+                              <input
+                                type="text"
+                                value={followUpQuestion}
+                                onChange={(e) => setFollowUpQuestion(e.target.value)}
+                                placeholder={t.askPlaceholder}
+                                className="w-full bg-stone-900/50 border border-stone-800 rounded-xl py-3 px-4 pr-12 text-sm text-stone-200 focus:outline-none focus:border-emerald-500/50 transition-all"
+                              />
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                <select
+                                  value={voiceLang}
+                                  onChange={(e) => setVoiceLang(e.target.value as Language)}
+                                  className="bg-stone-800/40 text-stone-500 text-[8px] font-bold px-1 py-0.5 rounded border border-stone-700 outline-none"
+                                >
+                                  {LANGUAGES.map(l => (
+                                    <option key={l.code} value={l.code}>{l.code.toUpperCase()}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => startListening('chatbot')}
+                                  className={cn(
+                                    "p-2 rounded-lg transition-all",
+                                    listening && voiceTarget === 'chatbot' ? "text-red-500 animate-pulse" : "text-stone-500 hover:text-emerald-500"
+                                  )}
+                                >
+                                  <Mic size={18} />
+                                </button>
+                              </div>
+                            </div>
                             <button
                               type="submit"
                               disabled={followUpLoading || !followUpQuestion.trim()}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-emerald-500 hover:text-emerald-400 disabled:opacity-50 transition-all"
+                              className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white p-3 rounded-xl transition-all shadow-lg shadow-emerald-900/20"
                             >
                               {followUpLoading ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
                             </button>
@@ -1011,7 +1093,7 @@ export default function App() {
                       </h3>
                       <div className="h-[250px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={analysis.bloomingData}>
+                          <AreaChart data={chartData}>
                             <defs>
                               <linearGradient id="colorBloom" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
@@ -1028,8 +1110,8 @@ export default function App() {
                             <Tooltip 
                               contentStyle={{ backgroundColor: '#1c1917', borderRadius: '12px', border: '1px solid #44403c', color: '#e7e5e4' }}
                             />
-                            <Area type="monotone" dataKey="activity" stroke="#10b981" strokeWidth={2} fill="url(#colorBloom)" name="Bloom Window" />
-                            <Area data={analysis.pollinationData} type="monotone" dataKey="activity" stroke="#f59e0b" strokeWidth={2} fill="url(#colorPollin)" name="Pollinator Activity" />
+                            <Area type="monotone" dataKey="activity" stroke="#10b981" strokeWidth={2} fill="url(#colorBloom)" name="Bloom Window" isAnimationActive={false} />
+                            <Area type="monotone" dataKey="pollinationActivity" stroke="#f59e0b" strokeWidth={2} fill="url(#colorPollin)" name="Pollinator Activity" isAnimationActive={false} />
                           </AreaChart>
                         </ResponsiveContainer>
                       </div>

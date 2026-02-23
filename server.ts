@@ -18,32 +18,57 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(cors());
+  app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  }));
   app.use(express.json());
+
+  // Request logging
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+  });
+
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
 
   // API Routes
   app.get("/api/submissions", (req, res) => {
     try {
+      if (!fs.existsSync(DB_FILE)) {
+        return res.json([]);
+      }
       const data = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
-      res.json(data.submissions);
+      res.json(data.submissions || []);
     } catch (error) {
+      console.error("Error reading submissions:", error);
       res.status(500).json({ error: "Failed to read database" });
     }
   });
 
   app.post("/api/submissions", (req, res) => {
     try {
-      const data = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
+      const data = fs.existsSync(DB_FILE) 
+        ? JSON.parse(fs.readFileSync(DB_FILE, "utf-8"))
+        : { submissions: [] };
+      
       const newSubmission = {
         ...req.body,
         id: Math.random().toString(36).substr(2, 9),
         timestamp: Date.now(),
-        choice: null, // Track farmer choice: 'A' (Change) or 'B' (Continue)
+        choice: null, 
       };
+      
       data.submissions.push(newSubmission);
       fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+      console.log(`Saved new submission: ${newSubmission.id}`);
       res.status(201).json(newSubmission);
     } catch (error) {
+      console.error("Error saving submission:", error);
       res.status(500).json({ error: "Failed to save submission" });
     }
   });
@@ -68,8 +93,11 @@ async function startServer() {
 
   app.get("/api/admin/stats", (req, res) => {
     try {
+      if (!fs.existsSync(DB_FILE)) {
+        return res.json({ total: 0, byRisk: {}, byChoice: {}, byCrop: {} });
+      }
       const data = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
-      const subs = data.submissions;
+      const subs = data.submissions || [];
       
       const stats = {
         total: subs.length,
@@ -90,6 +118,7 @@ async function startServer() {
       };
       res.json(stats);
     } catch (error) {
+      console.error("Error getting stats:", error);
       res.status(500).json({ error: "Failed to get stats" });
     }
   });
