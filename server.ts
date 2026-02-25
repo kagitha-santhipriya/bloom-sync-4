@@ -52,6 +52,7 @@ async function startServer() {
 
   app.post("/api/submissions", (req, res) => {
     try {
+      console.log("Received new submission request:", req.body.crop, req.body.location);
       const data = fs.existsSync(DB_FILE) 
         ? JSON.parse(fs.readFileSync(DB_FILE, "utf-8"))
         : { submissions: [] };
@@ -63,9 +64,10 @@ async function startServer() {
         choice: null, 
       };
       
+      if (!data.submissions) data.submissions = [];
       data.submissions.push(newSubmission);
       fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
-      console.log(`Saved new submission: ${newSubmission.id}`);
+      console.log(`Saved new submission: ${newSubmission.id}. Total submissions: ${data.submissions.length}`);
       res.status(201).json(newSubmission);
     } catch (error) {
       console.error("Error saving submission:", error);
@@ -88,6 +90,16 @@ async function startServer() {
       }
     } catch (error) {
       res.status(500).json({ error: "Failed to update choice" });
+    }
+  });
+
+  app.delete("/api/submissions", (req, res) => {
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify({ submissions: [] }, null, 2));
+      console.log("Cleared all submissions");
+      res.json({ message: "History cleared" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to clear history" });
     }
   });
 

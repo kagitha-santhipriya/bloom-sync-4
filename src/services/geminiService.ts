@@ -53,15 +53,17 @@ export async function analyzeCropMismatch(
     Response Language: ${language}
 
     MANDATORY: Use Google Search to find:
-    1. Current and forecasted weather (temperature, rainfall, humidity) for ${location} around ${date}.
-    2. Specific agricultural challenges, pest alerts, or government advisories in ${location} for ${crop} during this season.
-    3. Historical blooming and harvest patterns of ${crop} in this specific region.
+    1. Current and forecasted weather (temperature, rainfall, humidity, wind speed) for ${location} around ${date}.
+    2. Specific agricultural challenges, pest alerts (e.g., mango hopper, thrips, powdery mildew), or government advisories in ${location} for ${crop} during this season.
+    3. Historical blooming and harvest patterns of ${crop} in this specific region and how this year's weather compares to the 10-year average.
+    4. Soil moisture trends and irrigation requirements for ${crop} in ${location} given the current weather.
 
     SYSTEM STRUCTURE:
     Layer 1 – Global Climate Intelligence Engine (Internal Processing)
     - Process temperature/rainfall forecasts, seasonal anomalies, vegetation trends, and pollinator activity.
     - Calculate Risk Score (0-10) and Yield Impact based on REAL-TIME data found via search.
     - If search results indicate a heatwave, drought, or unseasonal rain, reflect this in the risk score.
+    - Analyze the specific growth stage of ${crop} (e.g., flowering, fruit set) for the target date.
 
     Layer 2 – Farmer Advisory Layer (Output)
     - CONVERT technical output into simple farmer-understandable language.
@@ -69,7 +71,12 @@ export async function analyzeCropMismatch(
     - Use simple phrases: "Too hot this season", "Too much rain during flowering", "Less insects seen", "Flowers may fall", "Fruit count may reduce".
     - IMPORTANT: Ensure the "climaticConditions" field provides a clear, simple summary of the weather for that location and date in ${language}.
     - ADVICE MUST BE SPECIFIC: If you suggest a precaution, make sure it's relevant to the specific weather threat found in search (e.g., "Use shade nets if it's too hot" or "Ensure drainage if heavy rain is expected").
-    - Mention real local factors if found (e.g., "Local reports say this year is drier than usual").
+    - Mention real local factors if found (e.g., "Local reports from ${location} say this year is drier than usual").
+    - CONSISTENCY CHECK: 
+      - If Expected Yield loss is > 30%, Risk Level MUST be 'high'.
+      - If Expected Yield loss is 10-30%, Risk Level MUST be 'medium'.
+      - If Expected Yield loss is < 10%, Risk Level MUST be 'low'.
+      - Ensure the "whatMayHappen" description matches the Risk Level (e.g., don't say "everything is fine" if risk is high).
 
     ADVISORY FORMAT:
     1. What may happen: Simple explanation of the climate impact on the crop.
@@ -233,21 +240,22 @@ export async function extractDetailsFromVoice(transcript: string, language: stri
     const prompt = `
       You are an expert agricultural data extractor. 
       The following transcript is from a farmer speaking about their crop, location, and target date.
-      The transcript is primarily in ${langName}, but may contain some English words.
+      The transcript is primarily in ${langName}, but may contain some English words or be entirely in English.
       
       Transcript: "${transcript}"
       
       TASK:
-      Extract the following details from the transcript:
-      1. "crop": The name of the crop (e.g., Mango, Rice, Cotton, Tomato).
-      2. "location": The city, district, village, or region.
-      3. "date": The target date, month, or season. If a month is mentioned, convert it to a date format like "2024-05-01" or just the month name if year is unknown.
+      Extract the following details from the transcript and translate them to English:
+      1. "crop": The name of the crop in English (e.g., Mango, Rice, Cotton, Tomato, Wheat, Maize).
+      2. "location": The city, district, village, or region in English.
+      3. "date": The target date, month, or season. If a month is mentioned, convert it to a date format like "2026-03-01". If only a month is mentioned, assume the year 2026.
       
       RULES:
-      - Return a valid JSON object.
-      - If a detail is missing, omit the key or set it to null.
-      - Be smart about synonyms (e.g., "Paddy" -> "Rice").
-      - If the transcript is in a local language, translate the extracted values to English for the form fields.
+      - Return a valid JSON object ONLY.
+      - If a detail is missing, set it to null.
+      - Be smart about synonyms (e.g., "Paddy" -> "Rice", "Mirchi" -> "Chilli").
+      - If the transcript mentions multiple crops or locations, pick the most prominent one.
+      - Ensure the output is in English regardless of the input language.
       
       JSON OUTPUT ONLY:
     `;

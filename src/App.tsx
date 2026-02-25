@@ -30,7 +30,8 @@ import {
   Filter,
   ArrowRight,
   Zap,
-  Square
+  Square,
+  Trash2
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -92,6 +93,7 @@ export default function App() {
   const [autoSpeak, setAutoSpeak] = useState(true);
   const audioSourceRef = React.useRef<AudioBufferSourceNode | null>(null);
   const audioContextRef = React.useRef<AudioContext | null>(null);
+  const isSpeakingRef = React.useRef(false);
   const [listening, setListening] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState<'form' | 'chatbot'>('form');
   const [isHearing, setIsHearing] = useState(false);
@@ -144,9 +146,62 @@ export default function App() {
     }
   }, [lang]);
 
+  // Load state from localStorage on mount
+  useEffect(() => {
+    const savedAnalysis = localStorage.getItem('bloomSync_lastAnalysis');
+    const savedCrop = localStorage.getItem('bloomSync_crop');
+    const savedLocation = localStorage.getItem('bloomSync_location');
+    const savedDate = localStorage.getItem('bloomSync_date');
+    const savedSubId = localStorage.getItem('bloomSync_subId');
+    const savedChoice = localStorage.getItem('bloomSync_choice');
+
+    if (savedAnalysis) {
+      try {
+        setAnalysis(JSON.parse(savedAnalysis));
+        if (savedCrop) setCrop(savedCrop);
+        if (savedLocation) setLocation(savedLocation);
+        if (savedDate) setDate(savedDate);
+        if (savedSubId) setCurrentSubmissionId(savedSubId);
+        if (savedChoice) setUserChoice(savedChoice as 'A' | 'B');
+        setShowLanding(false);
+      } catch (e) {
+        console.error("Failed to load saved analysis", e);
+      }
+    }
+    
+    fetchSubmissions();
+  }, []);
+
+  // Save state to localStorage when it changes
+  useEffect(() => {
+    if (analysis) {
+      localStorage.setItem('bloomSync_lastAnalysis', JSON.stringify(analysis));
+      localStorage.setItem('bloomSync_crop', crop);
+      localStorage.setItem('bloomSync_location', location);
+      localStorage.setItem('bloomSync_date', date);
+      if (currentSubmissionId) localStorage.setItem('bloomSync_subId', currentSubmissionId);
+      if (userChoice) localStorage.setItem('bloomSync_choice', userChoice);
+    } else {
+      localStorage.removeItem('bloomSync_lastAnalysis');
+      localStorage.removeItem('bloomSync_subId');
+      localStorage.removeItem('bloomSync_choice');
+    }
+  }, [analysis, crop, location, date, currentSubmissionId, userChoice]);
+
+  // Periodic fetch for submissions to keep map updated
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchSubmissions();
+      if (activeTab === 'admin') {
+        fetchAdminStats();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
+
   const fetchAdminStats = async (retries = 3) => {
     try {
-      const response = await fetch(`${window.location.origin}/api/admin/stats`);
+      const response = await fetch(`/api/admin/stats`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       setAdminStats(data);
@@ -160,7 +215,7 @@ export default function App() {
 
   const fetchSubmissions = async (retries = 3) => {
     try {
-      const response = await fetch(`${window.location.origin}/api/submissions`);
+      const response = await fetch(`/api/submissions`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       setSubmissions(data);
@@ -200,7 +255,7 @@ export default function App() {
     
     recognition.lang = langMap[voiceLang] || 'en-US';
     recognition.interimResults = true;
-    recognition.continuous = true;
+    recognition.continuous = false; // Use one-shot for better reliability in form fields
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
@@ -368,7 +423,7 @@ export default function App() {
   const handleChoice = async (choice: 'A' | 'B') => {
     if (!currentSubmissionId) return;
     try {
-      await fetch(`${window.location.origin}/api/submissions/${currentSubmissionId}/choice`, {
+      await fetch(`/api/submissions/${currentSubmissionId}/choice`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ choice }),
@@ -399,16 +454,24 @@ export default function App() {
   };
 
   const stopSpeaking = () => {
+    isSpeakingRef.current = false;
     if (audioSourceRef.current) {
       try {
         audioSourceRef.current.stop();
+        audioSourceRef.current.disconnect();
       } catch (e) {
-        console.error("Error stopping audio", e);
+        // Ignore errors if already stopped
       }
       audioSourceRef.current = null;
     }
     if (audioContextRef.current) {
-      audioContextRef.current.close();
+      try {
+        if (audioContextRef.current.state !== 'closed') {
+          audioContextRef.current.close();
+        }
+      } catch (e) {
+        // Ignore errors
+      }
       audioContextRef.current = null;
     }
     setSpeaking(false);
@@ -439,8 +502,14 @@ export default function App() {
     if (!textToSpeak) return;
     
     setSpeaking(true);
+    isSpeakingRef.current = true;
+    
     try {
       const base64Audio = await generateSpeech(textToSpeak, lang);
+      
+      // Check if we should still be speaking (user might have clicked stop during fetch)
+      if (!isSpeakingRef.current) return;
+
       if (base64Audio) {
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         audioContextRef.current = audioContext;
@@ -450,7 +519,6 @@ export default function App() {
         }
         const arrayBuffer = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0)).buffer;
         
-        // Gemini TTS returns linear PCM 16-bit
         const int16Array = new Int16Array(arrayBuffer);
         const float32Array = new Float32Array(int16Array.length);
         for (let i = 0; i < int16Array.length; i++) {
@@ -467,6 +535,7 @@ export default function App() {
         source.onended = () => {
           if (audioSourceRef.current === source) {
             setSpeaking(false);
+            isSpeakingRef.current = false;
             audioSourceRef.current = null;
             audioContext.close();
             audioContextRef.current = null;
@@ -475,10 +544,12 @@ export default function App() {
         source.start();
       } else {
         setSpeaking(false);
+        isSpeakingRef.current = false;
       }
     } catch (error) {
       console.error("Speech playback failed", error);
       setSpeaking(false);
+      isSpeakingRef.current = false;
     }
   };
 
@@ -527,7 +598,7 @@ export default function App() {
       };
 
       // Save to backend
-      const response = await fetch(`${window.location.origin}/api/submissions`, {
+      const response = await fetch(`/api/submissions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSubmission),
@@ -766,6 +837,11 @@ export default function App() {
                           Hearing...
                         </span>
                       )}
+                      {loading && voiceTarget === 'form' && (
+                        <span className="text-[10px] font-bold text-emerald-400 animate-pulse bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20">
+                          Processing Voice...
+                        </span>
+                      )}
                       {voiceError && (
                         <span className="text-[10px] font-bold text-red-400 animate-pulse bg-red-500/10 px-2 py-1 rounded-md border border-red-500/20">
                           {voiceError}
@@ -815,14 +891,37 @@ export default function App() {
                     )}
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">{t.cropType}</label>
-                      <input 
-                        type="text" 
-                        value={crop}
-                        onChange={(e) => setCrop(e.target.value)}
-                        placeholder="e.g. Mango, Cotton, Rice"
-                        className="w-full px-4 py-2.5 rounded-xl bg-stone-950/40 border border-stone-800 text-stone-100 placeholder:text-stone-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
-                        required
-                      />
+                      <div className="relative">
+                        <input 
+                          type="text" 
+                          value={crop}
+                          onChange={(e) => setCrop(e.target.value)}
+                          placeholder="e.g. Mango, Cotton, Rice"
+                          className="w-full pl-4 pr-20 py-2.5 rounded-xl bg-stone-950/40 border border-stone-800 text-stone-100 placeholder:text-stone-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+                          required
+                        />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          {crop && (
+                            <button
+                              type="button"
+                              onClick={() => handleSpeak(crop)}
+                              className="p-1.5 text-stone-500 hover:text-emerald-500 transition-colors"
+                            >
+                              <Volume2 size={14} />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => startListening('form')}
+                            className={cn(
+                              "p-1.5 rounded-lg transition-all",
+                              listening && voiceTarget === 'form' ? "text-red-500 animate-pulse" : "text-stone-500 hover:text-emerald-500"
+                            )}
+                          >
+                            <Mic size={16} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">{t.location}</label>
@@ -833,9 +932,30 @@ export default function App() {
                           value={location}
                           onChange={(e) => setLocation(e.target.value)}
                           placeholder="e.g. Hyderabad, Telangana"
-                          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-stone-950/40 border border-stone-800 text-stone-100 placeholder:text-stone-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+                          className="w-full pl-10 pr-20 py-2.5 rounded-xl bg-stone-950/40 border border-stone-800 text-stone-100 placeholder:text-stone-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
                           required
                         />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          {location && (
+                            <button
+                              type="button"
+                              onClick={() => handleSpeak(location)}
+                              className="p-1.5 text-stone-500 hover:text-emerald-500 transition-colors"
+                            >
+                              <Volume2 size={14} />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => startListening('form')}
+                            className={cn(
+                              "p-1.5 rounded-lg transition-all",
+                              listening && voiceTarget === 'form' ? "text-red-500 animate-pulse" : "text-stone-500 hover:text-emerald-500"
+                            )}
+                          >
+                            <Mic size={16} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div>
@@ -846,9 +966,30 @@ export default function App() {
                           type="date" 
                           value={date}
                           onChange={(e) => setDate(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-stone-950/40 border border-stone-800 text-stone-100 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+                          className="w-full pl-10 pr-20 py-2.5 rounded-xl bg-stone-950/40 border border-stone-800 text-stone-100 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
                           required
                         />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          {date && (
+                            <button
+                              type="button"
+                              onClick={() => handleSpeak(date)}
+                              className="p-1.5 text-stone-500 hover:text-emerald-500 transition-colors"
+                            >
+                              <Volume2 size={14} />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => startListening('form')}
+                            className={cn(
+                              "p-1.5 rounded-lg transition-all",
+                              listening && voiceTarget === 'form' ? "text-red-500 animate-pulse" : "text-stone-500 hover:text-emerald-500"
+                            )}
+                          >
+                            <Mic size={16} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <button 
@@ -936,8 +1077,17 @@ export default function App() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">
                           <div className="bg-stone-950/40 p-4 rounded-xl border border-stone-800">
-                            <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-2">{t.whatMayHappen}</h3>
-                            <p className="text-stone-200 leading-relaxed">{analysis.advisory.whatMayHappen}</p>
+                            <div className="flex justify-between items-start mb-2">
+                              <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-widest">{t.whatMayHappen}</h3>
+                              <button 
+                                onClick={() => handleSpeak(analysis.advisory.whatMayHappen)}
+                                className="p-1.5 rounded-full bg-stone-800/40 text-stone-500 hover:text-emerald-400 transition-colors"
+                                title="Speak this section"
+                              >
+                                <Volume2 size={12} />
+                              </button>
+                            </div>
+                            <p className="text-stone-200 leading-relaxed text-sm">{analysis.advisory.whatMayHappen}</p>
                           </div>
                           
                           {analysis.sources && analysis.sources.length > 0 && (
@@ -1013,6 +1163,11 @@ export default function App() {
                                   "{interimTranscript}"
                                 </div>
                               )}
+                              {followUpLoading && (
+                                <div className="absolute bottom-full right-0 mb-2 bg-emerald-600 text-white text-[10px] px-3 py-1 rounded-full animate-pulse">
+                                  Agent is thinking...
+                                </div>
+                              )}
                             </div>
                             <button
                               type="submit"
@@ -1031,7 +1186,21 @@ export default function App() {
                                 exit={{ opacity: 0, y: 10 }}
                                 className="p-4 bg-stone-900/30 rounded-xl border border-stone-800/50 text-sm text-stone-300 leading-relaxed"
                               >
-                                {followUpAnswer}
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    {followUpAnswer}
+                                  </div>
+                                  <button 
+                                    onClick={() => handleSpeak(followUpAnswer)}
+                                    className={cn(
+                                      "p-2 rounded-full transition-all ml-2",
+                                      speaking ? "bg-red-500/20 text-red-400" : "bg-stone-800/40 text-stone-400 hover:bg-emerald-500/20 hover:text-emerald-400"
+                                    )}
+                                    title={speaking ? "Stop Speaking" : "Listen to Answer"}
+                                  >
+                                    {speaking ? <VolumeX size={16} className="animate-pulse" /> : <Volume2 size={16} />}
+                                  </button>
+                                </div>
                               </motion.div>
                             )}
                           </AnimatePresence>
@@ -1057,7 +1226,19 @@ export default function App() {
                               <RefreshCw size={18} />
                               {t.optionA}
                             </h3>
-                            {userChoice === 'A' && <CheckCircle2 size={20} className="text-blue-400" />}
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSpeak(`${analysis.advisory.optionA.suggestion}. Recommended crops: ${analysis.advisory.optionA.crops.join(", ")}`);
+                                }}
+                                className="p-1.5 rounded-full bg-stone-800/40 text-stone-500 hover:text-blue-400 transition-colors"
+                                title="Speak this section"
+                              >
+                                <Volume2 size={12} />
+                              </button>
+                              {userChoice === 'A' && <CheckCircle2 size={20} className="text-blue-400" />}
+                            </div>
                           </div>
                           <p className="text-sm text-stone-300 mb-4">{analysis.advisory.optionA.suggestion}</p>
                           <div className="flex flex-wrap gap-2">
@@ -1079,7 +1260,19 @@ export default function App() {
                               <CheckCircle2 size={18} />
                               {t.optionB}
                             </h3>
-                            {userChoice === 'B' && <CheckCircle2 size={20} className="text-emerald-400" />}
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSpeak(`Precaution steps: ${analysis.advisory.optionB.precautionSteps.join(". ")}`);
+                                }}
+                                className="p-1.5 rounded-full bg-stone-800/40 text-stone-500 hover:text-emerald-400 transition-colors"
+                                title="Speak this section"
+                              >
+                                <Volume2 size={12} />
+                              </button>
+                              {userChoice === 'B' && <CheckCircle2 size={20} className="text-emerald-400" />}
+                            </div>
                           </div>
                           <ul className="space-y-2">
                             {analysis.advisory.optionB.precautionSteps.map((step: string, i: number) => (
@@ -1246,6 +1439,27 @@ export default function App() {
                   <h2 className="text-2xl font-bold text-stone-100">{t.historyPortal}</h2>
                   <p className="text-stone-400 text-sm">Access and re-examine all your previous agricultural assessments.</p>
                 </div>
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={async () => {
+                      if (confirm("Are you sure you want to clear all history?")) {
+                        await fetch(`/api/submissions`, { method: 'DELETE' });
+                        fetchSubmissions();
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-900/20 text-red-400 hover:bg-red-900/40 rounded-xl border border-red-800/30 transition-all text-sm font-bold"
+                  >
+                    <Trash2 size={16} />
+                    Clear All
+                  </button>
+                  <button 
+                    onClick={() => fetchSubmissions()}
+                    className="flex items-center gap-2 px-4 py-2 bg-stone-900/40 backdrop-blur-md rounded-xl border border-stone-800 text-stone-400 hover:text-emerald-400 transition-all text-sm font-bold"
+                  >
+                    <RefreshCw size={16} className={cn(loading && "animate-spin")} />
+                    Refresh
+                  </button>
+                </div>
               </div>
 
               {submissions.length === 0 ? (
@@ -1258,19 +1472,31 @@ export default function App() {
                   {submissions.map((sub) => (
                     <div key={sub.id} className="bg-stone-900/40 backdrop-blur-md p-5 rounded-2xl border border-stone-800 shadow-xl hover:bg-stone-800/40 transition-all group">
                       <div className="flex justify-between items-start mb-3">
-                        <div>
+                        <div className="flex-1">
                           <h3 className="font-bold text-stone-100 group-hover:text-emerald-400 transition-colors">{sub.crop}</h3>
                           <p className="text-xs text-stone-500 flex items-center gap-1">
                             <MapPin size={12} />
                             {sub.location}
                           </p>
                         </div>
-                        <span className={cn(
-                          "px-2 py-1 rounded-lg text-[10px] font-bold uppercase",
-                          sub.riskLevel === 'high' ? "bg-red-900/40 text-red-400 border border-red-800/30" : sub.riskLevel === 'medium' ? "bg-amber-900/40 text-amber-400 border border-amber-800/30" : "bg-emerald-900/40 text-emerald-400 border border-emerald-800/30"
-                        )}>
-                          {t[sub.riskLevel]}
-                        </span>
+                        <div className="flex flex-col items-end gap-2">
+                          <span className={cn(
+                            "px-2 py-1 rounded-lg text-[10px] font-bold uppercase",
+                            sub.riskLevel === 'high' ? "bg-red-900/40 text-red-400 border border-red-800/30" : sub.riskLevel === 'medium' ? "bg-amber-900/40 text-amber-400 border border-amber-800/30" : "bg-emerald-900/40 text-emerald-400 border border-emerald-800/30"
+                          )}>
+                            {t[sub.riskLevel]}
+                          </span>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSpeak(`${sub.crop} in ${sub.location}. Risk level is ${t[sub.riskLevel]}. ${sub.climaticConditions}`);
+                            }}
+                            className="p-1.5 rounded-full bg-stone-800/40 text-stone-500 hover:text-emerald-400 transition-colors"
+                            title="Speak summary"
+                          >
+                            <Volume2 size={12} />
+                          </button>
+                        </div>
                       </div>
                       <div className="text-[10px] text-stone-500 mb-4">
                         {new Date(sub.timestamp).toLocaleString()}
@@ -1304,6 +1530,13 @@ export default function App() {
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-3">
+                  <button 
+                    onClick={() => fetchSubmissions()}
+                    className="p-2 bg-stone-900/40 backdrop-blur-md rounded-xl border border-stone-800 text-stone-400 hover:text-emerald-400 transition-all"
+                    title="Refresh Map Data"
+                  >
+                    <RefreshCw size={16} className={cn(loading && "animate-spin")} />
+                  </button>
                   <div className="flex items-center gap-2 bg-stone-900/40 backdrop-blur-md p-1.5 rounded-xl border border-stone-800">
                     <Filter size={14} className="text-stone-500 ml-2" />
                     <select 
@@ -1363,6 +1596,7 @@ export default function App() {
                   {submissions
                     .filter(s => filterRisk === 'all' || s.riskLevel === filterRisk)
                     .filter(s => filterCrop === 'all' || s.crop === filterCrop)
+                    .filter(s => typeof s.lat === 'number' && typeof s.lng === 'number')
                     .map((sub) => (
                     <React.Fragment key={sub.id}>
                       <Marker position={[sub.lat, sub.lng]}>
