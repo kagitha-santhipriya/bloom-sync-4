@@ -53,10 +53,11 @@ export async function analyzeCropMismatch(
     Response Language: ${language}
 
     MANDATORY: Use Google Search to find:
-    1. Current and forecasted weather (temperature, rainfall, humidity, wind speed) for ${location} around ${date}.
-    2. Specific agricultural challenges, pest alerts (e.g., mango hopper, thrips, powdery mildew), or government advisories in ${location} for ${crop} during this season.
-    3. Historical blooming and harvest patterns of ${crop} in this specific region and how this year's weather compares to the 10-year average.
-    4. Soil moisture trends and irrigation requirements for ${crop} in ${location} given the current weather.
+    1. REAL-TIME weather data (temperature, rainfall, humidity, wind speed) for ${location} as of ${new Date().toISOString()}.
+    2. Forecasted weather for ${location} around ${date}.
+    3. Specific agricultural challenges, pest alerts (e.g., mango hopper, thrips, powdery mildew), or government advisories in ${location} for ${crop} during this season.
+    4. Historical blooming and harvest patterns of ${crop} in this specific region and how this year's weather compares to the 10-year average.
+    5. Soil moisture trends and irrigation requirements for ${crop} in ${location} given the current weather.
 
     SYSTEM STRUCTURE:
     Layer 1 – Global Climate Intelligence Engine (Internal Processing)
@@ -64,6 +65,7 @@ export async function analyzeCropMismatch(
     - Calculate Risk Score (0-10) and Yield Impact based on REAL-TIME data found via search.
     - If search results indicate a heatwave, drought, or unseasonal rain, reflect this in the risk score.
     - Analyze the specific growth stage of ${crop} (e.g., flowering, fruit set) for the target date.
+    - CROSS-REFERENCE multiple sources to ensure prediction efficiency and accuracy.
 
     Layer 2 – Farmer Advisory Layer (Output)
     - CONVERT technical output into simple farmer-understandable language.
@@ -77,6 +79,7 @@ export async function analyzeCropMismatch(
       - If Expected Yield loss is 10-30%, Risk Level MUST be 'medium'.
       - If Expected Yield loss is < 10%, Risk Level MUST be 'low'.
       - Ensure the "whatMayHappen" description matches the Risk Level (e.g., don't say "everything is fine" if risk is high).
+    - EFFICIENCY: Provide the most practical, low-cost, and high-impact advice first.
 
     ADVISORY FORMAT:
     1. What may happen: Simple explanation of the climate impact on the crop.

@@ -9,46 +9,65 @@ dotenv.config();
 
 const DB_FILE = path.resolve(process.cwd(), "db.json");
 
-// Initialize DB if not exists
-if (!fs.existsSync(DB_FILE)) {
-  fs.writeFileSync(DB_FILE, JSON.stringify({ submissions: [] }, null, 2));
-}
-
 async function startServer() {
-  const app = express();
-  const PORT = 3000;
+  try {
+    const app = express();
+    const PORT = 3000;
 
-  app.use(cors({
-    origin: "*",
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
-  }));
-  app.use(express.json());
+    console.log(`[${new Date().toISOString()}] Initializing server...`);
 
-  // Request logging
-  app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-    next();
-  });
-
-  // Health check
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
-  });
-
-  // API Routes
-  app.get("/api/submissions", (req, res) => {
-    try {
-      if (!fs.existsSync(DB_FILE)) {
-        return res.json([]);
-      }
-      const data = JSON.parse(fs.readFileSync(DB_FILE, "utf-8"));
-      res.json(data.submissions || []);
-    } catch (error) {
-      console.error("Error reading submissions:", error);
-      res.status(500).json({ error: "Failed to read database" });
+    // Initialize DB if not exists
+    if (!fs.existsSync(DB_FILE)) {
+      console.log(`[${new Date().toISOString()}] Creating new database file at ${DB_FILE}`);
+      fs.writeFileSync(DB_FILE, JSON.stringify({ submissions: [] }, null, 2));
+    } else {
+      console.log(`[${new Date().toISOString()}] Database file found at ${DB_FILE}`);
     }
-  });
+
+    console.log(`[${new Date().toISOString()}] Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
+
+    app.use(cors({
+      origin: "*",
+      methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"]
+    }));
+    app.use(express.json());
+
+    // Request logging
+    app.use((req, res, next) => {
+      console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+      next();
+    });
+
+    // Health check
+    app.get("/api/health", (req, res) => {
+      console.log(`[${new Date().toISOString()}] Health check requested`);
+      res.json({ 
+        status: "ok", 
+        timestamp: new Date().toISOString(), 
+        env: process.env.NODE_ENV || 'development',
+        dbPath: DB_FILE
+      });
+    });
+
+    // API Routes
+    app.get("/api/submissions", (req, res) => {
+      try {
+        console.log(`[${new Date().toISOString()}] GET /api/submissions`);
+        if (!fs.existsSync(DB_FILE)) {
+          return res.json([]);
+        }
+        const content = fs.readFileSync(DB_FILE, "utf-8");
+        if (!content || content.trim() === "") {
+          return res.json([]);
+        }
+        const data = JSON.parse(content);
+        res.json(data.submissions || []);
+      } catch (error: any) {
+        console.error(`[${new Date().toISOString()}] Error reading submissions:`, error.message || error);
+        res.status(500).json({ error: "Failed to read database", details: error.message });
+      }
+    });
 
   app.post("/api/submissions", (req, res) => {
     try {
@@ -135,6 +154,12 @@ async function startServer() {
     }
   });
 
+  // Catch-all for unhandled API routes
+  app.all("/api/*", (req, res) => {
+    console.log(`Unhandled API request: ${req.method} ${req.url}`);
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -153,6 +178,10 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+  } catch (err: any) {
+    console.error(`[${new Date().toISOString()}] CRITICAL: Failed to start server:`, err.message || err);
+    process.exit(1);
+  }
 }
 
 startServer();
